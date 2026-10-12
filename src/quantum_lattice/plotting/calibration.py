@@ -243,8 +243,8 @@ def _presentation_page(
     fig = plt.figure(figsize=(13.333333, 7.5))
     fig.text(0.075, 0.939, "TORIC-CODE ERROR CALIBRATION", fontsize=9.5, weight="bold", color=_MUTED)
     titles = {
-        1: "Figure 11 · Size-independent defect calibration",
-        2: "Figure 12 · From stabilizer defects to an error rate",
+        1: "Figure 11: Size-independent defect calibration",
+        2: "Figure 12: Inferring a phase-error rate",
     }
     fig.text(0.075, 0.884, titles[index], fontsize=21, weight="semibold", color=_INK)
     fig.text(0.955, 0.939, f"{index} / 2", fontsize=9.5, ha="right", color=_MUTED)
