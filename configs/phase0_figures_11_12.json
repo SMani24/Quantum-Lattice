@@ -45,7 +45,6 @@
     "section": "Appendix D.1",
     "figures": [11, 12],
     "equations": ["D1", "D2", "D3", "D4"],
-    "original_grid_and_sample_count_available": false,
-    "status": "planned_not_executed"
+    "original_grid_and_sample_count_available": false
   }
 }
