@@ -18,6 +18,12 @@ Phase 0 implements the independent-error calibration in Figures 11 and 12, with 
 | notebooks/ | Exploratory work using the shared package |
 | codex material/ | Local roadmap, research notes, datasets, runs, figures, and model artifacts; excluded from Git |
 
+## Find the local results
+
+Each phase has its own local results directory beside its runner. For Phase 0, start at `experiments/phase0_figures_11_12/results/README.md`. The detailed report is `results/latest/RESULTS.md` within that experiment; the presentation is `results/latest/presentation/figures_11_12_presentation.pdf`. Separate plots are in `results/latest/figures/`, numerical data in `results/latest/data/`, and fit diagnostics in `results/latest/fit_metrics.json`.
+
+The per-phase `results/` directory is a local shortcut to that phase's retained artifacts under `codex material/artifacts/`. `latest/` selects the run being presented; timestamped runs stay available alongside it. Outputs are kept in one place and intentionally excluded from GitHub. After each phase, the report explains the method, findings, limitations, and file locations.
+
 ## Run the calibration
 
 See [the Phase 0 experiment description](experiments/phase0_figures_11_12/README.md) and its [configuration](configs/phase0_figures_11_12.json).

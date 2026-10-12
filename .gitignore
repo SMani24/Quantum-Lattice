@@ -1,5 +1,8 @@
 /codex material/
 
+# Local results shortcuts for each experiment phase.
+/experiments/*/results
+
 # Local working notes and agent instructions.
 /Markdown.md
 /AGENTS.md
