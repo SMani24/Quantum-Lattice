@@ -1,0 +1,51 @@
+{
+  "experiment": "phase0_figures_11_12",
+  "description": "Fresh reproduction of Appendix D.1 independent-error calibration",
+  "seed": 20261012,
+  "geometry": {
+    "lattice": "square_toric",
+    "boundary": "periodic",
+    "side_lengths": [8, 12, 16, 20, 24, 28, 32],
+    "qubits_per_cell": 2
+  },
+  "sampling": {
+    "model": "independent_bernoulli_z_errors",
+    "error_probability_grid": {
+      "start": 0.0,
+      "stop": 0.2,
+      "num_points": 41,
+      "endpoint": true
+    },
+    "independent_patterns_per_point": 10000,
+    "batch_size": 256,
+    "record_uncertainty_across_whole_lattice_patterns": true
+  },
+  "fit": {
+    "side_length": 32,
+    "input": "mean_vertex_defect_probability",
+    "target": "single_qubit_error_probability",
+    "polynomial_degree": 4,
+    "zero_intercept": true,
+    "method": "least_squares",
+    "published_coefficients_ascending_powers_1_to_4": [
+      0.2187, 0.72419, -2.5398, 4.90118
+    ],
+    "compare_with_analytic_inverse": true
+  },
+  "plotting": {
+    "x_axis": "vertex_defect_probability_p",
+    "y_axis": "single_qubit_error_probability_e_r",
+    "formats": ["pdf", "svg", "png"],
+    "png_dpi": 300,
+    "analytic_check_is_separately_labeled": true
+  },
+  "output_root": "codex material/artifacts/phase0_figures_11_12",
+  "provenance": {
+    "paper": "Reference Paper.pdf",
+    "section": "Appendix D.1",
+    "figures": [11, 12],
+    "equations": ["D1", "D2", "D3", "D4"],
+    "original_grid_and_sample_count_available": false,
+    "status": "planned_not_executed"
+  }
+}
