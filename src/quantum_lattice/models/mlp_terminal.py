@@ -37,8 +37,9 @@ class TrainingConsole(RunConsole):
         epoch = int(status.get("epoch", 0))
         state_name = _clean(status.get("state", "training")).lower()
         mode = state_name.upper()
+        finished = state_name in {"trained", "evaluated"} or bool(status.get("stop_reason"))
         message = _clean(status.get("message", ""))
-        state = (state_name, step >= maximum if maximum > 0 else False)
+        state = (state_name, finished, step >= maximum if maximum > 0 else False)
         now = self._clock()
         interval = 0.3 if self.interactive else 5.0
         if (self._last_render is not None and now - self._last_render < interval
@@ -49,7 +50,9 @@ class TrainingConsole(RunConsole):
 
         fraction = min(1.0, max(0.0, step / maximum)) if maximum > 0 else 0.0
         elapsed = float(status.get("elapsed_seconds", 0.0))
-        if "eta_seconds" in status:
+        if finished:
+            eta = 0.0
+        elif "eta_seconds" in status:
             eta = math.inf if status["eta_seconds"] is None else float(status["eta_seconds"])
         else:
             eta = elapsed * (1 - fraction) / fraction if fraction > 0 else math.inf
@@ -58,13 +61,19 @@ class TrainingConsole(RunConsole):
         best_mse = _metric(status.get("best_validation_mse"))
         best_step = status.get("best_step")
         best_at = "--" if best_step is None else str(int(best_step))
+        stopper = status.get("early_stopping", {})
+        policy = (f"early stop checks {status.get('early_stopping_wait', 0)}/{stopper.get('patience', '?')}"
+                  if stopper.get("enabled") else "fixed update budget")
+        if status.get("stop_reason"):
+            policy += f"; stop reason {status['stop_reason']}"
+        eta_label = "ETA to ceiling" if stopper.get("enabled") and not finished else "ETA"
 
         if not self.interactive:
             self.output_stream.write(
                 f"[{mode}] Updates {step:,}/{maximum:,}; epoch {epoch}; "
                 f"train MSE {train_mse}; validation MSE {validation_mse}; "
                 f"best validation MSE {best_mse} at update {best_at}; "
-                f"elapsed {_duration(elapsed)}; ETA ~{_duration(eta)}"
+                f"elapsed {_duration(elapsed)}; {eta_label} ~{_duration(eta)}; {policy}"
                 + (f"; {message}" if message else "") + "\n"
             )
             self.output_stream.flush()
@@ -76,11 +85,12 @@ class TrainingConsole(RunConsole):
         bar = "#" * filled + "-" * (bar_width - filled)
         lines = [
             self.title,
-            f"{mode}  [{bar}] {100 * fraction:5.1f}%",
+            f"{mode}  [{bar}] {100 * fraction:5.1f}% of update ceiling",
             f"Optimizer updates {step:,}/{maximum:,}  |  epoch {epoch}",
             f"Train MSE {train_mse}  |  validation MSE {validation_mse}",
             f"Best validation MSE {best_mse}  |  selected update {best_at}",
-            f"Elapsed {_duration(elapsed)}  |  ETA ~{_duration(eta)}",
+            f"Elapsed {_duration(elapsed)}  |  {eta_label} ~{_duration(eta)}",
+            policy,
             message or "Model selection uses validation data only.",
             _clean(status.get("controls", "p pause  |  r resume  |  q save and quit  |  Ctrl+C save and quit")),
         ]

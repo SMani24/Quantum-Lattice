@@ -51,6 +51,15 @@ def _config(settings: dict[str, Any]) -> dict[str, Any]:
         "torch_threads": settings.get("torch_threads", 1),
         "deterministic": settings.get("deterministic", True),
     }
+    stopping = settings.get("early_stopping", {})
+    if not isinstance(stopping, dict):
+        raise ValueError("early_stopping must be a dictionary")
+    config["early_stopping"] = {
+        "enabled": stopping.get("enabled", False),
+        "patience": stopping.get("patience", 20),
+        "min_delta": stopping.get("min_delta", 1e-6),
+        "min_steps": stopping.get("min_steps", 10000),
+    }
     for key in ("seed", "batch_size", "max_steps", "validation_interval", "torch_threads"):
         if isinstance(config[key], bool) or not isinstance(config[key], int):
             raise ValueError(f"{key} must be an integer")
@@ -67,6 +76,20 @@ def _config(settings: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("device must be auto, cpu, or cuda")
     if not isinstance(config["deterministic"], bool):
         raise ValueError("deterministic must be a boolean")
+    stopping = config["early_stopping"]
+    if not isinstance(stopping["enabled"], bool):
+        raise ValueError("early_stopping.enabled must be a boolean")
+    for key, minimum in (("patience", 1), ("min_steps", 0)):
+        if isinstance(stopping[key], bool) or not isinstance(stopping[key], int):
+            raise ValueError(f"early_stopping.{key} must be an integer")
+        if stopping[key] < minimum:
+            raise ValueError(f"early_stopping.{key} is out of range")
+    if (isinstance(stopping["min_delta"], bool)
+            or not isinstance(stopping["min_delta"], (int, float))):
+        raise ValueError("early_stopping.min_delta must be finite and nonnegative")
+    stopping["min_delta"] = float(stopping["min_delta"])
+    if not math.isfinite(stopping["min_delta"]) or stopping["min_delta"] < 0:
+        raise ValueError("early_stopping.min_delta must be finite and nonnegative")
     return config
 
 
@@ -76,6 +99,8 @@ class TrainSession:
     ``step`` counts optimizer updates. ``epoch`` counts shuffled passes started;
     a pass includes its final, possibly smaller, batch. Validation is performed
     after the first update, at each interval and at the final configured update.
+    Optional patience counts validation checks at or beyond ``min_steps``;
+    selecting the strictly best weights remains independent of ``min_delta``.
     """
 
     def __init__(
@@ -134,12 +159,23 @@ class TrainSession:
         self.best_step: int | None = None
         self._best_state_dict: dict[str, torch.Tensor] | None = None
         self.last_validation: dict[str, Any] | None = None
+        self.stopped_early = False
+        self.early_stopping_wait = 0
+        self.early_stopping_reference: float | None = None
         if checkpoint is not None:
             self._restore(checkpoint)
 
     @property
     def finished(self) -> bool:
-        return self.step >= self.config["max_steps"]
+        return self.stopped_early or self.step >= self.config["max_steps"]
+
+    @property
+    def stop_reason(self) -> str | None:
+        if self.stopped_early:
+            return "early_stopping"
+        if self.step >= self.config["max_steps"]:
+            return "max_steps"
+        return None
 
     @property
     def best_state_dict(self) -> dict[str, torch.Tensor] | None:
@@ -177,11 +213,24 @@ class TrainSession:
             self.best_val_mse = validation_mse
             self.best_step = self.step
             self._best_state_dict = _cpu_copy(self.model.state_dict())
+        stopping = self.config["early_stopping"]
+        if stopping["enabled"]:
+            reference = self.early_stopping_reference
+            if reference is None or validation_mse < reference - stopping["min_delta"]:
+                self.early_stopping_reference = validation_mse
+                self.early_stopping_wait = 0
+            elif self.step >= stopping["min_steps"]:
+                self.early_stopping_wait += 1
+                if self.early_stopping_wait >= stopping["patience"]:
+                    self.stopped_early = True
         event = {
             "step": self.step, "epoch": self.epoch, "batch_mse": batch_mse,
             "train_mse": train_mse, "validation_mse": validation_mse,
             "best_validation_mse": self.best_val_mse, "best_step": self.best_step,
             "improved": improved,
+            "early_stopping_wait": self.early_stopping_wait,
+            "early_stopping_reference": self.early_stopping_reference,
+            "stopped_early": self.stopped_early, "stop_reason": self.stop_reason,
         }
         self.last_validation = event
         return event.copy()
@@ -191,6 +240,8 @@ class TrainSession:
             raise ValueError("steps must be a nonnegative integer")
         events = []
         for _ in range(min(steps, self.config["max_steps"] - self.step)):
+            if self.finished:
+                break
             inputs, targets = self._batch()
             self.model.train()
             self.optimizer.zero_grad(set_to_none=True)
@@ -228,8 +279,8 @@ class TrainSession:
 
     def snapshot(self) -> dict[str, Any]:
         return {
-            "training_schema_version": 1,
-            "config": self.config.copy(),
+            "training_schema_version": 2,
+            "config": copy.deepcopy(self.config),
             "data_fingerprint": self.data_fingerprint,
             "device_type": self.device.type,
             "model_state_dict": _cpu_copy(self.model.state_dict()),
@@ -240,19 +291,29 @@ class TrainSession:
             "best_val_mse": self.best_val_mse, "best_step": self.best_step,
             "best_state_dict": self.best_state_dict,
             "last_validation": copy.deepcopy(self.last_validation),
+            "stopped_early": self.stopped_early,
+            "early_stopping_wait": self.early_stopping_wait,
+            "early_stopping_reference": self.early_stopping_reference,
             "torch_rng_state": torch.get_rng_state().clone(),
             "cuda_rng_states": [state.cpu().clone() for state in torch.cuda.get_rng_state_all()]
             if self.device.type == "cuda" else [],
         }
 
     def _restore(self, checkpoint: dict[str, Any]) -> None:
-        if checkpoint.get("training_schema_version") != 1:
+        version = checkpoint.get("training_schema_version")
+        if version not in (1, 2):
             raise ValueError("Unsupported training checkpoint version")
+        if version == 1 and self.config["early_stopping"]["enabled"]:
+            raise ValueError("Legacy checkpoints cannot resume with early stopping enabled")
         if checkpoint.get("data_fingerprint") != self.data_fingerprint:
             raise ValueError("Checkpoint training/validation data differ")
         # Runtime CPU thread count and explicit/auto device spelling may change.
         scientific = set(self.config) - {"device", "torch_threads"}
-        if any(checkpoint["config"].get(key) != self.config[key] for key in scientific):
+        saved_config = _config(checkpoint["config"])
+        if not saved_config["early_stopping"]["enabled"] and not self.config["early_stopping"]["enabled"]:
+            # Disabled legacy/current settings share the same training behavior.
+            saved_config["early_stopping"] = self.config["early_stopping"].copy()
+        if any(saved_config[key] != self.config[key] for key in scientific):
             raise ValueError("Checkpoint training settings differ")
         if checkpoint.get("device_type") != self.device.type:
             raise ValueError("Exact resume requires the original CPU/CUDA device type")
@@ -267,6 +328,24 @@ class TrainSession:
         self.best_step = checkpoint["best_step"]
         self._best_state_dict = _cpu_copy(checkpoint["best_state_dict"])
         self.last_validation = copy.deepcopy(checkpoint["last_validation"])
+        if version == 2:
+            if not isinstance(checkpoint["stopped_early"], bool):
+                raise ValueError("Invalid checkpoint early-stopping flag")
+            self.stopped_early = checkpoint["stopped_early"]
+            self.early_stopping_wait = checkpoint["early_stopping_wait"]
+            self.early_stopping_reference = checkpoint["early_stopping_reference"]
+            if (isinstance(self.early_stopping_wait, bool)
+                    or not isinstance(self.early_stopping_wait, int)
+                    or self.early_stopping_wait < 0):
+                raise ValueError("Invalid checkpoint early-stopping wait")
+            if self.early_stopping_reference is not None:
+                if (isinstance(self.early_stopping_reference, bool)
+                        or not isinstance(self.early_stopping_reference, (int, float))
+                        or not math.isfinite(self.early_stopping_reference)
+                        or self.early_stopping_reference < 0):
+                    raise ValueError("Invalid checkpoint early-stopping reference")
+            if self.stopped_early and not self.config["early_stopping"]["enabled"]:
+                raise ValueError("Early-stopped checkpoint has disabled stopping")
         if not 0 <= self.cursor <= len(self.permutation) or not 0 <= self.step <= self.config["max_steps"]:
             raise ValueError("Invalid checkpoint progress counters")
         torch.set_rng_state(checkpoint["torch_rng_state"].cpu())

@@ -52,6 +52,16 @@ class TrainingConsoleTests(unittest.TestCase):
         self.assertIn("best validation MSE -- at update --", output.getvalue())
         self.assertIn("ETA ~--", output.getvalue())
 
+    def test_early_stop_reports_finished_below_ceiling(self):
+        output = io.StringIO()
+        with TrainingConsole(200000, interactive=False, output_stream=output) as console:
+            console.render({"step": 12000, "state": "trained", "elapsed_seconds": 30,
+                            "stop_reason": "early_stopping", "early_stopping_wait": 20,
+                            "early_stopping": {"enabled": True, "patience": 20}})
+        self.assertIn("ETA ~0:00:00", output.getvalue())
+        self.assertIn("early stop checks 20/20", output.getvalue())
+        self.assertIn("stop reason early_stopping", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

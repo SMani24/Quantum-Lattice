@@ -31,6 +31,16 @@ from quantum_lattice.plotting.mlp import plot_learning_history, plot_test_predic
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ARTIFACT_PATH = Path("codex material/artifacts/phase1_mlp")
 
+# Exact published fixed-budget implementation (1b70fd6). Its architecture,
+# data selection and disabled-stopper updates remain supported by schema 2.
+LEGACY_FIXED_SOURCES = {
+    "src/quantum_lattice/models/mlp_experiment.py": "5f12917e95d4252ed303237334ca7600cdcb855913ab8b66007a75907a4b3940",
+    "src/quantum_lattice/models/mlp.py": "65022121a357bdecf097e221c41fa2f4c1d26486cfea9a1d94ef3386ad266ce0",
+    "src/quantum_lattice/models/mlp_training.py": "0ba128be99d225ba07f71a7c99b70513c8f4560e8e1ba678a9d941602a42ff2e",
+    "src/quantum_lattice/data/mlp_data.py": "a73dad583af7615ead5249a83c9fc19f1462c8d2c579958c2f2a0644afd91d76",
+    "src/quantum_lattice/metrics/regression.py": "bee520b71b59b95a61fea9b6c9d0cce323c6c39938c85de63d6d9fd572fd6dbc",
+}
+
 
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -192,6 +202,10 @@ def _save(run, session, history, manifest, state, elapsed):
               "train_mse": event.get("train_mse"), "validation_mse": event.get("validation_mse"),
               "device": str(session.device), "elapsed_seconds": elapsed,
               "latest_sha256": _sha(run / "latest.pt"), "test_evaluated": False}
+    status.update(stop_reason=session.stop_reason, stopped_early=session.stopped_early,
+                  early_stopping=session.config["early_stopping"],
+                  early_stopping_wait=session.early_stopping_wait,
+                  early_stopping_reference=session.early_stopping_reference)
     status["training_examples_seen"] = max(0, session.epoch - 1) * len(session.train_x) + session.cursor
     status["training_row_passes"] = status["training_examples_seen"] / len(session.train_x)
     _atomic_json(run / "status.json", status)
@@ -205,8 +219,22 @@ def _restore(run, config, data):
         raise ValueError("Unsupported MLP checkpoint schema")
     if manifest["config_sha256"] != hashlib.sha256(_canonical(config).encode()).hexdigest():
         raise ValueError("Stored run configuration changed")
-    if manifest["source_hashes"] != _source_hashes():
-        raise ValueError("Training source changed; retain this run and start a new one")
+    current_sources = _source_hashes()
+    if manifest["source_hashes"] != current_sources:
+        adaptable = {"src/quantum_lattice/models/mlp_experiment.py", "src/quantum_lattice/models/mlp_training.py"}
+        known_fixed = (manifest["source_hashes"] == LEGACY_FIXED_SOURCES
+                       and current_sources.keys() == LEGACY_FIXED_SOURCES.keys()
+                       and all(current_sources[key] == value for key, value in LEGACY_FIXED_SOURCES.items()
+                               if key not in adaptable)
+                       and not config["training"].get("early_stopping", {}).get("enabled", False))
+        if not known_fixed:
+            raise ValueError("Training source changed; retain this run and start a new one")
+        manifest = dict(manifest)
+        manifest["source_compatibility"] = {
+            "from_commit": "1b70fd6", "original_source_hashes": manifest["source_hashes"],
+            "current_source_hashes": current_sources,
+            "policy": "Known fixed-budget schema1; saved stopping policy/budget preserved"}
+        manifest["source_hashes"] = current_sources
     if manifest["environment"] != _environment():
         raise ValueError("Training environment changed; exact continuation requires the saved environment")
     if manifest["dataset_fingerprint"] != data.provenance["source_fingerprint"]:
@@ -218,6 +246,7 @@ def _restore(run, config, data):
 
 def _report(run, config, manifest, status, metrics=None):
     counts = manifest["row_counts"]
+    stopper = status.get("early_stopping", config["training"].get("early_stopping", {"enabled": False}))
     text = f"""# MLP run results
 
 Declared scope: {config.get('provenance', {}).get('scope', 'Magnitude baseline on the declared dataset')}.
@@ -230,6 +259,8 @@ Saved state: **{status['state']}**, optimizer update {status['step']}/{status['m
 Training examples processed: {status['training_examples_seen']}; equivalent full row passes: {status['training_row_passes']:.4f}.
 Training/validation/final-test row counts: {counts['train']}/{counts['validation']}/{counts['test']}.
 Best validation MSE: {status['best_validation_mse']}; selected update: {status['best_step']}.
+Stop reason: {status.get('stop_reason') or 'not finished'}.
+Early stopping: {json.dumps(stopper)}; consecutive eligible checks without meaningful improvement: {status.get('early_stopping_wait', 0)}.
 Training uses Adam, shuffled batches of {config['training']['batch_size']},
 learning rate {config['training']['learning_rate']}. Batch size, update budget,
 validation cadence and Hamiltonian splits are our documented choices.
@@ -255,6 +286,11 @@ Raw sampler data stays in the separate sample-generation run.
                                                 "constant_training_mean_baseline")}
         text += f"\nFinal-test metrics (raw linear predictions):\n\n```json\n{json.dumps(summary, indent=2)}\n```\n"
     (run / "RESULTS.md").write_text(text)
+
+
+def _print_summary(run):
+    from .mlp_campaign import format_run_summary, run_summary
+    print(format_run_summary(run_summary(run)), flush=True)
 
 
 def train(config=None, *, run_dir=None, resume=False, interactive=True,
@@ -285,6 +321,9 @@ def train(config=None, *, run_dir=None, resume=False, interactive=True,
         data = _load_data(config, repo_root)
         if resume:
             session, history, manifest, previous_elapsed = _restore(run, config, data)
+            if "source_compatibility" in manifest:
+                _atomic_json(run / "manifest.json", manifest)
+                _atomic_json(run / "source_compatibility.json", manifest["source_compatibility"])
         else:
             session = TrainSession(data.train.x, data.train.y, data.validation.x, data.validation.y, config["training"])
             # Store normalized engine defaults, rather than hiding implicit values.
@@ -357,6 +396,7 @@ def train(config=None, *, run_dir=None, resume=False, interactive=True,
         _atomic_json(run / "status.json", status)
         _expose(run, repo_root)
         print(f"Saved {status['state'].upper()} run: {run}", flush=True)
+        _print_summary(run)
         return run
 
 
@@ -381,6 +421,7 @@ def evaluate(run_dir, *, repo_root=REPO_ROOT):
                 for key, value in frozen["model_state_dict"].items()):
             raise ValueError("Frozen model differs from validation-selected checkpoint")
         if status["state"] == "evaluated":
+            _print_summary(run)
             return _read(run / "test_metrics.json")
         status["state"] = "evaluating"
         _atomic_json(run / "status.json", status)
@@ -417,9 +458,12 @@ def evaluate(run_dir, *, repo_root=REPO_ROOT):
                       "test_payload_checksums_verified": True,
                       "test_protocol": "all edges; Hamiltonian-level bootstrap; no clipping",
                       "source_hashes": _source_hashes(), "environment": _environment()}
+        if "source_compatibility" in manifest:
+            provenance["source_compatibility"] = manifest["source_compatibility"]
         _atomic_json(run / "evaluation_provenance.json", provenance)
         status.update(state="evaluated", test_evaluated=True)
         _atomic_json(run / "status.json", status)
         _report(run, config, manifest, status, metrics)
         _expose(run, repo_root)
+        _print_summary(run)
         return metrics
