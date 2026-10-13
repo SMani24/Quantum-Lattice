@@ -9,6 +9,18 @@ short-chain exact comparisons, checkpoint/RNG and backend parity, statistical
 summaries, terminal restoration, and grouped-dataset pause/resume checks. These
 use tiny fixtures and short validation chains, never the configured full pilot.
 
+The MLP checks add independent NumPy forward calculations, grouped verified data
+loading with test isolation, raw regression/whole-Hamiltonian bootstrap oracles,
+safe checkpoints, identical interrupted CPU training, finalization recovery and
+plot/terminal exports. Use the separate MLP environment to include Torch checks:
+
+```sh
+.venv-mlp/bin/python -m unittest discover -s tests -v
+```
+
+Torch-dependent checks skip when Torch is absent, so the Monte Carlo environment
+does not need to change. Synthetic fixture errors are not research accuracy.
+
 Run the unit and integration checks from the repository root:
 
 ```sh

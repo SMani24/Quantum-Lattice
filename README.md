@@ -9,7 +9,9 @@ star/pair estimates, CPU workers, and terminal pause/resume controls. Start with
 the [short benchmark and runner instructions](experiments/phase1_sample_generation/README.md).
 The dashboard selects full paper-domain datasets for seven lattice sizes,
 starting with L=4, and shows saved completion/resume status. A separate weak-field
-pilot remains available. Neural-network training and the full Phase 1 study remain ahead.
+pilot remains available. The [paper-style MLP runner](experiments/baseline_mlp/README.md)
+uses a separate .venv-mlp environment, Hamiltonian group splits, validation-selected
+checkpoints, and explicit final-test evaluation. The full Phase 1 study remains ahead.
 
 ## Repository layout
 

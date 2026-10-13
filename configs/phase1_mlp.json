@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "dataset_path": "codex material/artifacts/phase1_sample_generation/campaigns/phase1_paper_domain/L4/run",
+  "lattice_size": 4,
+  "mode": "paper_size",
+  "fixed_edge": 0,
+  "training_hamiltonians": 7450,
+  "training": {
+    "seed": 20261013,
+    "learning_rate": 0.00001,
+    "batch_size": 128,
+    "max_steps": 10000,
+    "validation_interval": 100,
+    "device": "cpu",
+    "torch_threads": 1,
+    "deterministic": true
+  },
+  "execution": {"checkpoint_steps": 100},
+  "evaluation": {"bootstrap_samples": 200, "seed": 20261014},
+  "provenance": {
+    "reference": "Reference Paper.pdf, Appendix C.1; Reference Paper Codes/ANN/network.py",
+    "architecture": "3 -> 128 ReLU -> 150 ReLU -> 128 ReLU -> 1 linear",
+    "adaptation": "PyTorch port; not a bit-identical replay of TensorFlow 1 Adam",
+    "our_choices": "Batch size, step budget, validation cadence, group splits, fixed-edge selection, seeds, and checkpoint protocol are our choices. The visible supplied graph uses Adam at 1e-5; historical training loop settings are unavailable.",
+    "scope": "Magnitude regression on known-field Monte Carlo estimators; signs and iterative correction are separate steps. No recovered historical phase filter."
+  }
+}

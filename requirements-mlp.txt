@@ -1,0 +1,3 @@
+# Install from https://download.pytorch.org/whl/cpu in the separate MLP environment.
+# NumPy and Matplotlib are ordinary project dependencies in pyproject.toml.
+torch==2.7.1+cpu
