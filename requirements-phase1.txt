@@ -1,0 +1,4 @@
+# Optional accelerator used by the sample-generation runner.
+# Install alongside the editable package; its NumPy dependency remains explicit.
+numpy==2.2.6
+numba==0.63.1
