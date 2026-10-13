@@ -58,13 +58,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(paused["completed"], 0)
         self.assertEqual(paused["attempts_this_session"], 2 * 17 * 9)
         checkpoints = sorted((paused_run / "checkpoints").glob("*.npz"))
-        self.assertEqual(len(checkpoints), 2)
+        self.assertEqual(len(checkpoints), 1)
         for checkpoint in checkpoints:
             arrays = load_arrays(checkpoint)
-            self.assertEqual(arrays["states"].shape, (0, 18))
+            self.assertEqual(arrays["states"].shape, (2, 18))
             metadata = json.loads(arrays["metadata_json"].item())
-            self.assertEqual(metadata["completed_sweeps"], 17)
-            self.assertEqual(metadata["chain"]["attempted"], 17 * 9)
+            self.assertEqual(metadata["completed_sweeps"], 34)
+            self.assertEqual(metadata["chain"]["attempted"], 34 * 9)
         with self.assertRaisesRegex(ValueError, "incomplete"):
             verify_run(paused_run)
         resumed = run_generation(REPO, paused_run, workers=2, interactive=False)
@@ -156,14 +156,14 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     def test_production_records_survive_a_second_pause(self):
         run_dir = prepare_run(REPO, tiny_config(), self.base / "production-pause")
-        result = run_generation(REPO, run_dir, workers=1, interactive=False, max_chunks=6)
+        result = run_generation(REPO, run_dir, workers=1, interactive=False, max_chunks=7)
         self.assertEqual(result["state"], "paused")
         before = {}
         for path in (run_dir / "checkpoints").glob("*.npz"):
             arrays = load_arrays(path)
             if len(arrays["states"]):
                 before[path.name] = arrays["states"].copy()
-        self.assertEqual(len(before), 2)
+        self.assertEqual(len(before), 1)
         self.assertTrue(all(states.shape == (2, 18) for states in before.values()))
         self.assertEqual(run_generation(REPO, run_dir, workers=2, interactive=False)["state"], "complete")
         for name, first_records in before.items():

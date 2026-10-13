@@ -9,6 +9,16 @@ from quantum_lattice.simulation.terminal import RunConsole
 
 
 class RunConsoleTests(unittest.TestCase):
+    def test_verification_has_its_own_progress_without_sampling_counters(self):
+        output = io.StringIO()
+        with RunConsole(4, interactive=False, output_stream=output) as console:
+            console.render({"phase": "verifying", "completed": 1, "total": 4,
+                            "elapsed_seconds": 2, "message": "Checking saved samples"})
+        text = output.getvalue()
+        self.assertIn("[VERIFYING]", text)
+        self.assertIn("checked 1/4", text)
+        self.assertNotIn("attempts 0", text)
+
     def test_redirected_output_throttles_and_has_no_ansi(self):
         output = io.StringIO()
         seconds = [0.0]

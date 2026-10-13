@@ -151,8 +151,9 @@ class RunConsole:
         total = int(status.get("total", self.total_jobs))
         paused = bool(status.get("paused", False))
         pausing = bool(status.get("pausing", False))
+        phase = status.get("phase", "sampling")
         message = _clean(status.get("message", ""))
-        state = (paused, pausing, completed >= total if total > 0 else False)
+        state = (paused, pausing, phase, completed >= total if total > 0 else False)
         now = self._clock()
         interval = 0.3 if self.interactive else 5.0
         if (
@@ -178,12 +179,19 @@ class RunConsole:
             eta = math.inf if override is None else float(override)
         else:
             eta = elapsed * (1 - fraction) / fraction if fraction > 0 else math.inf
-        mode = "PAUSED" if paused else "PAUSING" if pausing else "RUNNING"
+        mode = "PAUSED" if paused else "PAUSING" if pausing else "VERIFYING" if phase == "verifying" else "RUNNING"
         if total > 0 and completed >= total:
             mode = "COMPLETE"
         running = status.get("running", 0)
         workers = status.get("workers", 1)
         if not self.interactive:
+            if phase == "verifying":
+                self.output_stream.write(
+                    f"[{mode}] Hamiltonians checked {completed}/{total}; "
+                    f"elapsed {_duration(elapsed)}; ETA ~{_duration(eta)}; {message}\n"
+                )
+                self.output_stream.flush()
+                return
             self.output_stream.write(
                 f"[{mode}] Hamiltonians {completed}/{total}; "
                 f"attempts {attempts_done:,}/{attempts_total:,}; "
@@ -207,7 +215,7 @@ class RunConsole:
             f"Retained samples {samples_done:,}/{samples_total:,}",
             f"Elapsed {_duration(elapsed)}  |  ETA ~{_duration(eta)}",
             message or "Working; checkpoints are saved at chunk boundaries.",
-            "p pause  |  r resume  |  q save and quit  |  Ctrl+C save and quit",
+            _clean(status.get("controls", "p pause  |  r resume  |  q save and quit  |  Ctrl+C save and quit")),
         ]
         if self._line_count:
             self.output_stream.write(f"\x1b[{self._line_count}A")

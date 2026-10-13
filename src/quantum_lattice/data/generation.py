@@ -14,6 +14,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import fcntl
 from fractions import Fraction
+from functools import lru_cache
 import hashlib
 import importlib.metadata
 import json
@@ -29,6 +30,7 @@ import time
 import numpy as np
 
 from quantum_lattice.lattice import square_lattice
+from quantum_lattice.data.state_storage import decode_states, encode_states
 from quantum_lattice.observables.solvable import local_estimators
 from quantum_lattice.observables.statistics import autocorrelation_diagnostic, summarize
 from quantum_lattice.simulation.solvable import StarMetropolisChain
@@ -36,6 +38,19 @@ from quantum_lattice.simulation.terminal import RunConsole
 
 
 SCHEMA = 1
+STORAGE_DEFAULTS = {"state_encoding": "int8", "retain_estimator_records": True,
+                    "retain_block_means": True}
+
+
+def storage_settings(config):
+    """Resolve optional storage flags without changing legacy config hashes."""
+    return {**STORAGE_DEFAULTS, **config.get("storage", {})}
+
+
+@lru_cache(maxsize=8)
+def _lattice(L):
+    """Reuse immutable topology within each independent worker process."""
+    return square_lattice(L)
 
 
 def _integer(value, name, minimum=1):
@@ -80,6 +95,15 @@ def validate_config(config: dict) -> dict:
     _integer(config["statistics"]["block_size_records"], "block_size_records")
     for key in ("workers", "chunk_sweeps"):
         _integer(config["execution"][key], key)
+    storage = config.get("storage", {})
+    if not isinstance(storage, dict) or set(storage) - set(STORAGE_DEFAULTS):
+        raise ValueError("storage needs only state_encoding, retain_estimator_records, retain_block_means")
+    resolved = storage_settings(config)
+    if resolved["state_encoding"] not in {"int8", "packed_bits"}:
+        raise ValueError("state_encoding must be int8 or packed_bits")
+    for key in ("retain_estimator_records", "retain_block_means"):
+        if not isinstance(resolved[key], bool):
+            raise ValueError(f"{key} must be a boolean")
     return config
 
 
@@ -113,9 +137,8 @@ def _atomic_npz(path: Path, **arrays):
 def _source_hashes(repo_root):
     paths = [repo_root / "src/quantum_lattice" / name for name in (
         "lattice/topology.py", "lattice/builders.py", "lattice/square.py", "simulation/solvable.py",
-        "simulation/terminal.py", "observables/solvable.py", "observables/statistics.py",
-        "data/generation.py")]
-    paths += sorted((repo_root / "experiments/phase1_sample_generation").glob("*.py"))
+        "observables/solvable.py", "observables/statistics.py",
+        "data/generation.py", "data/state_storage.py")]
     return {str(p.relative_to(repo_root)): _sha_file(p) for p in paths}
 
 
@@ -222,7 +245,7 @@ def _worker_init(backend):
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     # Warm the compiled signature before task timing; startup remains in the
     # parent's elapsed session time. No retained physics data are generated.
-    StarMetropolisChain(square_lattice(3), np.zeros(18), 0, backend=backend).advance(1)
+    StarMetropolisChain(_lattice(3), np.zeros(18), 0, backend=backend).advance(1)
 
 
 def _load_npz(path):
@@ -235,27 +258,43 @@ def _read_metadata(arrays):
 
 
 def _instance_summary(path):
-    arrays = _load_npz(path)
-    return json.loads(str(arrays["summary_json"].item()))
+    """Inspect progress without inflating configurations or estimator arrays."""
+    summary_path = path.with_suffix(".json")
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text())
+    else:
+        with np.load(path, allow_pickle=False) as archive:
+            summary = json.loads(str(archive["summary_json"].item()))
+    if summary.get("id") != path.stem:
+        raise ValueError("completed instance summary identity mismatch")
+    return summary
 
 
-def _final_arrays(lattice, fields, records, metadata, block_size):
+def _log_weight_trace(records, fields):
+    """Use a fixed NumPy reduction, independent of BLAS worker thread counts."""
+    return np.sum(records * fields, axis=1, dtype=np.float64)
+
+
+def _final_arrays(lattice, fields, records, metadata, block_size, storage=None):
+    storage = STORAGE_DEFAULTS if storage is None else storage
     values = local_estimators(lattice, fields, records)
-    arrays = {"states": records, "b_z": fields,
+    arrays = {**encode_states(records, storage["state_encoding"]), "b_z": fields,
               "edge_vertex_indices": lattice.edge_vertex_indices,
               "metadata_json": np.array(_canonical(metadata))}
     for channel in ("star", "pair", "z"):
         data = values[channel]
-        arrays[channel + "_values"] = data
+        if storage["retain_estimator_records"]:
+            arrays[channel + "_values"] = data
         for key, val in summarize(data, block_size).items():
-            arrays[channel + "_" + key] = val
+            if key != "block_means" or storage["retain_block_means"]:
+                arrays[channel + "_" + key] = val
     ends = lattice.edge_vertex_indices
     arrays["mlp_X"] = np.column_stack((arrays["star_mean"][ends[:, 0]],
                                        arrays["star_mean"][ends[:, 1]], arrays["pair_mean"]))
     arrays["target_abs_b"] = np.abs(fields)
     arrays["target_b"] = fields
     scalar_traces = {
-        "log_weight": records @ fields,
+        "log_weight": _log_weight_trace(records, fields),
         "edge_magnetization": records.mean(axis=1),
         "mean_star_estimator": values["star"].mean(axis=1),
     }
@@ -286,14 +325,17 @@ def _advance_job(run_dir_string, instance, config):
     final = run_dir / "instances" / (instance["id"] + ".npz")
     if final.exists():
         return {"id": instance["id"], "done": True, **_instance_summary(final)}
-    lattice = square_lattice(config["lattice"]["L"])
+    lattice = _lattice(config["lattice"]["L"])
     sampler = config["sampler"]
+    storage = storage_settings(config)
     if checkpoint.exists():
         saved = _load_npz(checkpoint)
         metadata = _read_metadata(saved)
         if metadata["instance"] != instance:
             raise ValueError("checkpoint Hamiltonian identity mismatch")
-        fields, records = saved["b_z"], saved["states"]
+        fields, records = saved["b_z"], decode_states(saved)
+        if ("states" in saved) != (storage["state_encoding"] == "int8"):
+            raise ValueError("checkpoint storage encoding differs from its configuration")
         chain = StarMetropolisChain.from_snapshot(
             lattice, fields, metadata["chain"], backend=sampler["backend"],
             lazy_probability=sampler["lazy_probability"])
@@ -303,7 +345,7 @@ def _advance_job(run_dir_string, instance, config):
         if chain.attempted != completed * lattice.n_vertices:
             raise ValueError("checkpoint attempts do not match completed sweeps")
         expected_count = max(0, completed - sampler["burn_in_sweeps"]) // sampler["thinning_sweeps"]
-        if records.shape != (expected_count, lattice.n_edges) or records.dtype != np.int8 or not np.isin(records, [-1, 1]).all():
+        if records.shape != (expected_count, lattice.n_edges) or metadata.get("retained_records", expected_count) != expected_count:
             raise ValueError("checkpoint retained states do not match its schedule")
         expected_fields = np.random.default_rng(np.random.SeedSequence(instance["field_seed"])).uniform(
             config["fields"]["low"], config["fields"]["high"], lattice.n_edges)
@@ -330,6 +372,7 @@ def _advance_job(run_dir_string, instance, config):
     if retained:
         records = np.concatenate((records, np.stack(retained)), axis=0)
     metadata.update({"schema_version": SCHEMA, "completed_sweeps": current,
+                     "retained_records": len(records),
                      "chain": chain.snapshot(), "backend": chain.backend,
                      "compute_seconds": metadata["compute_seconds"] + time.perf_counter() - started})
     if current == sampler["total_sweeps"]:
@@ -337,12 +380,13 @@ def _advance_job(run_dir_string, instance, config):
         if len(records) != expected_records:
             raise RuntimeError("retained-record count disagrees with sampling schedule")
         arrays, summary = _final_arrays(lattice, fields, records, metadata,
-                                       config["statistics"]["block_size_records"])
+                                       config["statistics"]["block_size_records"], storage)
         _atomic_npz(final, **arrays)
         _atomic_json(final.with_suffix(".json"), summary)
         checkpoint.unlink(missing_ok=True)
         return {"done": True, **summary}
-    _atomic_npz(checkpoint, states=records, b_z=fields, metadata_json=np.array(_canonical(metadata)))
+    _atomic_npz(checkpoint, **encode_states(records, storage["state_encoding"]),
+                b_z=fields, metadata_json=np.array(_canonical(metadata)))
     return {"id": instance["id"], "done": False, "sweeps": current,
             "attempted": chain.attempted, "records": len(records)}
 
@@ -358,33 +402,50 @@ def inspect_run(run_dir):
         checkpoint = run_dir / "checkpoints" / (name + ".npz")
         if final.exists():
             progress[name] = {"done": True, **_instance_summary(final)}
+            if progress[name]["split"] != instance["split"]:
+                raise ValueError("completed instance summary split mismatch")
         elif checkpoint.exists():
-            arrays = _load_npz(checkpoint)
-            metadata = _read_metadata(arrays)
+            with np.load(checkpoint, allow_pickle=False) as archive:
+                metadata = _read_metadata(archive)
+            if metadata["instance"] != instance:
+                raise ValueError("checkpoint Hamiltonian identity mismatch")
+            recorded = max(0, metadata["completed_sweeps"] - config["sampler"]["burn_in_sweeps"]) // config["sampler"]["thinning_sweeps"]
             progress[name] = {"done": False, "sweeps": metadata["completed_sweeps"],
-                              "attempted": metadata["chain"]["attempted"], "records": len(arrays["states"])}
+                              "attempted": metadata["chain"]["attempted"], "records": recorded}
         else:
             progress[name] = {"done": False, "sweeps": 0, "attempted": 0, "records": 0}
     return config, manifest, progress
 
 
-def verify_run(run_dir):
-    """Check identities, physics constraints and file/schema consistency, not mixing."""
+def verify_run(run_dir, progress_callback=None):
+    """Check identities, physics constraints and storage consistency, not mixing.
+
+    An optional ``progress_callback(done, total, instance_id)`` receives an
+    initial zero and one update per checked instance. Interrupting verification
+    never modifies completed Monte Carlo instance files.
+    """
     run_dir = Path(run_dir)
-    config, manifest, progress = inspect_run(run_dir)
+    config = json.loads((run_dir / "config.json").read_text())
+    manifest = json.loads((run_dir / "manifest.json").read_text())
     validate_config(config)
     if manifest["config_sha256"] != hashlib.sha256(_canonical(config).encode()).hexdigest() or manifest["instances"] != _bank(config):
         raise ValueError("dataset configuration or Hamiltonian seed/group plan has changed")
+    _, _, progress = inspect_run(run_dir)
     if not all(p["done"] for p in progress.values()):
         raise ValueError("dataset is incomplete; resume it before verification")
-    lattice = square_lattice(config["lattice"]["L"])
+    lattice = _lattice(config["lattice"]["L"])
+    storage = storage_settings(config)
     checks = []
+    if progress_callback is not None:
+        progress_callback(0, len(manifest["instances"]), None)
     expected = (config["sampler"]["total_sweeps"] - config["sampler"]["burn_in_sweeps"]) // config["sampler"]["thinning_sweeps"]
     for instance in manifest["instances"]:
         path = run_dir / "instances" / (instance["id"] + ".npz")
         arrays = _load_npz(path)
         metadata = _read_metadata(arrays)
-        records = arrays["states"]
+        records = decode_states(arrays)
+        if ("states" in arrays) != (storage["state_encoding"] == "int8"):
+            raise ValueError("final storage encoding differs from its configuration")
         if metadata["instance"] != instance or records.shape != (expected, lattice.n_edges):
             raise ValueError("instance identity or state shape mismatch")
         if not np.isin(records, [-1, 1]).all() or lattice.plaquette_syndrome(records == -1).any():
@@ -400,20 +461,38 @@ def verify_run(run_dir):
             raise ValueError("field seed does not reproduce saved Hamiltonian")
         if not np.array_equal(arrays["edge_vertex_indices"], lattice.edge_vertex_indices):
             raise ValueError("edge ordering differs from the square factory")
-        calculated = local_estimators(lattice, fields, records)
+        recomputed, summary = _final_arrays(lattice, fields, records, metadata,
+                                           config["statistics"]["block_size_records"], storage)
         for channel in ("star", "pair", "z"):
-            if not np.isfinite(arrays[channel + "_values"]).all():
-                raise ValueError("nonfinite observable values")
-            np.testing.assert_array_equal(arrays[channel + "_values"], calculated[channel])
-            for key, value in summarize(calculated[channel], config["statistics"]["block_size_records"]).items():
-                np.testing.assert_allclose(arrays[channel + "_" + key], value, rtol=0, atol=0, equal_nan=True)
+            key = channel + "_values"
+            if (key in arrays) != storage["retain_estimator_records"]:
+                raise ValueError("observable record storage differs from its configuration")
+            if key in arrays:
+                if not np.isfinite(arrays[key]).all():
+                    raise ValueError("nonfinite observable values")
+                np.testing.assert_array_equal(arrays[key], recomputed[key])
+            for key in ("mean", "iid_se", "block_se", "block_means"):
+                if key == "block_means" and not storage["retain_block_means"]:
+                    if channel + "_" + key in arrays:
+                        raise ValueError("block-mean storage differs from its configuration")
+                    continue
+                np.testing.assert_allclose(arrays[channel + "_" + key], recomputed[channel + "_" + key], rtol=0, atol=0, equal_nan=True)
         ends = lattice.edge_vertex_indices
         np.testing.assert_array_equal(arrays["mlp_X"], np.column_stack((arrays["star_mean"][ends[:, 0]], arrays["star_mean"][ends[:, 1]], arrays["pair_mean"])))
         np.testing.assert_array_equal(arrays["target_abs_b"], np.abs(fields))
         np.testing.assert_array_equal(arrays["target_b"], fields)
         if metadata["chain"]["attempted"] != config["sampler"]["total_sweeps"] * lattice.n_vertices:
             raise ValueError("attempt count disagrees with sweep definition")
+        if metadata["completed_sweeps"] != config["sampler"]["total_sweeps"] or metadata.get("retained_records", expected) != expected:
+            raise ValueError("final sweep or retained-record count mismatch")
+        # Restore validates counters, current spins, topology and RNG descriptors.
+        StarMetropolisChain.from_snapshot(lattice, fields, metadata["chain"],
+            backend=config["sampler"]["backend"], lazy_probability=config["sampler"]["lazy_probability"])
+        if _instance_summary(path) != summary or json.loads(arrays["summary_json"].item()) != summary:
+            raise ValueError("saved instance summary differs from recomputed records")
         checks.append({"id": instance["id"], "split": instance["split"], "sha256": _sha_file(path)})
+        if progress_callback is not None:
+            progress_callback(len(checks), len(manifest["instances"]), instance["id"])
     report = {"schema_version": SCHEMA, "passed": True, "instances": checks,
               "local_rows": len(checks) * lattice.n_edges,
               "scope": "storage, group identity, estimators and sector invariants; not an equilibration certificate"}
@@ -446,12 +525,17 @@ def run_generation(repo_root, run_dir, workers=None, interactive=True, max_chunk
         started = time.perf_counter()
         active_elapsed = 0.0
         previous_tick = started
-        base_attempts = sum(p["attempted"] for p in progress.values())
+        attempts_done = sum(p["attempted"] for p in progress.values())
+        base_attempts = attempts_done
+        samples_done = sum(p["records"] for p in progress.values())
+        complete_count = sum(p["done"] for p in progress.values())
         attempts_total = len(progress) * config["sampler"]["total_sweeps"] * config["lattice"]["L"] ** 2
         samples_total = len(progress) * (config["sampler"]["total_sweeps"] - config["sampler"]["burn_in_sweeps"]) // config["sampler"]["thinning_sweeps"]
         paused = quitting = False
         submitted = 0
         futures = {}
+        last_status_saved = started - 1.0
+        last_status_state = None
         # One NumPy/BLAS thread per process; parallelize independent Hamiltonians.
         limits = {key: os.environ.get(key) for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS")}
         for key in limits:
@@ -482,34 +566,39 @@ def run_generation(repo_root, run_dir, workers=None, interactive=True, max_chunk
                                 for future in ready:
                                     instance = futures.pop(future)
                                     result = future.result()
+                                    previous = progress[instance["id"]]
+                                    attempts_done += result["attempted"] - previous["attempted"]
+                                    samples_done += result["records"] - previous["records"]
+                                    complete_count += int(result["done"]) - int(previous["done"])
                                     progress[instance["id"]] = result
                                     if not result["done"]:
-                                        pending.append(instance)
+                                        pending.appendleft(instance)
                             elif paused and not quitting:
                                 time.sleep(0.1)
-                            complete_count = sum(p["done"] for p in progress.values())
                             now = time.perf_counter()
                             if futures or not paused:
                                 active_elapsed += now - previous_tick
                             previous_tick = now
-                            attempts_done = sum(p["attempted"] for p in progress.values())
                             new_attempts = attempts_done - base_attempts
                             eta = (attempts_total - attempts_done) * active_elapsed / new_attempts if new_attempts else None
                             status = {"completed": complete_count, "total": len(progress), "running": len(futures),
                                       "paused": paused and not futures, "pausing": paused and bool(futures),
                                       "elapsed_seconds": now - started, "eta_seconds": eta,
                                       "attempts_done": attempts_done, "attempts_total": attempts_total,
-                                      "samples_done": sum(p["records"] for p in progress.values()), "samples_total": samples_total,
+                                      "samples_done": samples_done, "samples_total": samples_total,
                                       "workers": worker_count,
                                       "message": "Saving active chunks before exit" if quitting else "Waiting for active chunks to checkpoint" if paused and futures else "Paused; checkpoints saved" if paused else "Sampling independent Hamiltonians"}
                             console.render(status)
-                            _atomic_json(run_dir / "status.json", {**status, "state": "stopping" if quitting else "pausing" if paused and futures else "paused" if paused else "running"})
+                            status_state = "stopping" if quitting else "pausing" if paused and futures else "paused" if paused else "running"
+                            if now - last_status_saved >= 1.0 or status_state != last_status_state:
+                                _atomic_json(run_dir / "status.json", {**status, "state": status_state})
+                                last_status_saved, last_status_state = now, status_state
                             if quitting and not futures:
                                 break
                         except KeyboardInterrupt:
                             quitting = True
                             paused = False
-                    session_state = "complete" if all(p["done"] for p in progress.values()) else "paused"
+                    session_state = "complete" if complete_count == len(progress) else "paused"
         finally:
             for key, previous in limits.items():
                 if previous is None:
@@ -517,29 +606,54 @@ def run_generation(repo_root, run_dir, workers=None, interactive=True, max_chunk
                 else:
                     os.environ[key] = previous
             _atomic_json(run_dir / "status.json", {"state": "verifying" if session_state == "complete" else session_state,
-                         "completed": sum(p["done"] for p in progress.values()), "total": len(progress),
+                         "completed": complete_count, "total": len(progress),
                          "elapsed_session_seconds": time.perf_counter() - started})
         elapsed = time.perf_counter() - started
-        attempts_new = sum(p["attempted"] for p in progress.values()) - base_attempts
+        attempts_new = attempts_done - base_attempts
         result = {"run_dir": str(run_dir), "state": session_state,
-                  "completed": sum(p["done"] for p in progress.values()), "total": len(progress),
+                  "completed": complete_count, "total": len(progress),
                   "elapsed_seconds": elapsed, "attempts_this_session": attempts_new,
                   "attempts_per_second_including_startup_io": attempts_new / elapsed if elapsed else None,
                   "workers": worker_count}
         if session_state == "complete":
             _atomic_json(run_dir / "status.json", {"state": "verifying", "completed": len(progress), "total": len(progress)})
             try:
-                report = verify_run(run_dir)
+                verification_started = time.perf_counter()
+                last_verification_save = verification_started - 1.0
+                with RunConsole(len(progress), title="Phase 1 · dataset verification", interactive=interactive) as console:
+                    def verification_progress(done, total, instance_id):
+                        nonlocal last_verification_save
+                        if console.poll() == "quit":
+                            raise KeyboardInterrupt
+                        now = time.perf_counter()
+                        status = {"phase": "verifying", "completed": done, "total": total,
+                                  "elapsed_seconds": now - verification_started,
+                                  "message": f"Checked {instance_id or '0 instances'}; Ctrl+C stops verification and preserves saved samples",
+                                  "controls": "q or Ctrl+C stop verification; resume to check saved samples"}
+                        console.render(status)
+                        if now - last_verification_save >= 1.0 or done == total:
+                            _atomic_json(run_dir / "status.json", {**status, "state": "verifying",
+                                         "completed": total, "verified": done})
+                            last_verification_save = now
+                    report = verify_run(run_dir, verification_progress)
+                result["verification_seconds"] = time.perf_counter() - verification_started
+            except KeyboardInterrupt:
+                result["state"] = "verification_pending"
+                result["elapsed_seconds"] = time.perf_counter() - started
+                _atomic_json(run_dir / "status.json", {"state": "verification_pending",
+                             "completed": len(progress), "total": len(progress)})
+                _atomic_json(run_dir / "last_session.json", result)
+                return result
             except Exception:
                 _atomic_json(run_dir / "status.json", {"state": "verification_failed"})
                 raise
             entries = []
-            for instance in manifest["instances"]:
+            for instance, check in zip(manifest["instances"], report["instances"]):
                 path = run_dir / "instances" / (instance["id"] + ".npz")
                 summary = _instance_summary(path)
                 if not path.with_suffix(".json").exists():
                     _atomic_json(path.with_suffix(".json"), summary)
-                entries.append({"path": str(path.relative_to(run_dir)), "sha256": _sha_file(path), **summary})
+                entries.append({"path": str(path.relative_to(run_dir)), "sha256": check["sha256"], **summary})
             _atomic_json(run_dir / "dataset.json", {"schema_version": SCHEMA, "instances": entries,
                          "split_counts": {s: sum(i["split"] == s for i in manifest["instances"]) for s in ("train", "validation", "test")},
                          "local_rows": report["local_rows"], "sampling_scope": manifest["measurement_scope"]})
