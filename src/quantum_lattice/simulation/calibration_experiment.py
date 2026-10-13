@@ -15,7 +15,9 @@ import time
 
 import numpy as np
 
-from quantum_lattice.lattice.square import star_syndrome, validate_side_length
+from quantum_lattice.lattice.builders import square_lattice
+from quantum_lattice.lattice.square import validate_side_length
+from quantum_lattice.lattice.topology import Lattice
 from quantum_lattice.metrics.calibration import (
     analytic_pattern_variance,
     evaluate_polynomial,
@@ -23,7 +25,7 @@ from quantum_lattice.metrics.calibration import (
     exact_vertex_rate,
     fit_inverse,
 )
-from quantum_lattice.simulation.phase_errors import run_calibration_point, sample_phase_errors
+from quantum_lattice.simulation.phase_errors import run_calibration_point, sample_lattice_errors
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -146,12 +148,13 @@ def _fit_metrics(rows: list[dict], config: dict) -> dict:
     return result
 
 
-def _verification(rows: list[dict], config: dict) -> dict:
+def _verification(rows: list[dict], config: dict, lattices: dict[int, Lattice]) -> dict:
     rng = np.random.default_rng(np.random.SeedSequence(config["seed"], spawn_key=(999, 0)))
     parity_checks = {}
     for side in config["geometry"]["side_lengths"]:
-        patterns = sample_phase_errors(rng, side, 0.17, 256)
-        parity_checks[str(side)] = bool(np.all(star_syndrome(patterns).sum(axis=(-2, -1)) % 2 == 0))
+        lattice = lattices[side]
+        patterns = sample_lattice_errors(rng, lattice, 0.17, 256)
+        parity_checks[str(side)] = bool(np.all(lattice.star_syndrome(patterns).sum(axis=-1) % 2 == 0))
     z_scores = [abs(r["z_score"]) for r in rows if r["se_p"] > 0 and r["z_score"] is not None]
     ratios = [
         r["se_p"] / float(np.sqrt(analytic_pattern_variance(r["e_r"], r["L"]) / r["patterns"]))
@@ -234,11 +237,26 @@ def run_experiment(
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + f"-seed{config['seed']}"
     if not run_id or Path(run_id).name != run_id or run_id in {".", ".."}:
         raise ValueError("run_id must be one directory name")
+    # Reuse one immutable topology per size across every probability and batch.
+    lattices = {side: square_lattice(side) for side in config["geometry"]["side_lengths"]}
     run_dir = output_root / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     (run_dir / "data").mkdir()
     (run_dir / "INCOMPLETE").write_text("Run has not completed.\n")
     _write_json(run_dir / "effective_config.json", config)
+    _write_json(run_dir / "lattices.json", {
+        str(side): {
+            "geometry": lattice.geometry, "boundary": lattice.boundary,
+            "shape": list(lattice.shape),
+            "n_vertices": lattice.n_vertices, "n_edges": lattice.n_edges,
+            "n_faces": lattice.n_faces,
+            "vertex_degrees": sorted(set(map(int, lattice.vertex_degrees))),
+            "face_degrees": sorted(set(map(int, lattice.face_degrees))),
+            "edge_id_order": "2*(y*L+x)+orientation; horizontal=0, vertical=1",
+            "sample_shape": "(batch, n_edges)",
+        }
+        for side, lattice in lattices.items()
+    })
     import matplotlib
     _write_json(run_dir / "environment.json", {
         "python": sys.version, "numpy": np.__version__, "matplotlib": matplotlib.__version__,
@@ -255,6 +273,7 @@ def run_experiment(
         "stream_scheme": "SeedSequence(seed, spawn_key=(L, probability_grid_index))",
         "original_grid_and_counts_available": False,
         "method": "Fresh independent Bernoulli error patterns; no Metropolis ground-state sampling.",
+        "lattice_representation": "Immutable Vertex/Edge/Face/Lattice topology with compiled incidence arrays.",
     })
     start = time.perf_counter()
     rows = []
@@ -265,6 +284,7 @@ def run_experiment(
             row = run_calibration_point(
                 side, float(rate), settings["independent_patterns_per_point"],
                 settings["batch_size"], sequence,
+                lattice=lattices[side],
             )
             row["probability_grid_index"] = index
             row["analytic_se_p"] = float(np.sqrt(analytic_pattern_variance(rate, side) / row["patterns"]))
@@ -281,7 +301,7 @@ def run_experiment(
         for row in rows:
             writer.writerow({**row, "stream_spawn_key": json.dumps(row["stream_spawn_key"])})
     _write_json(run_dir / "fit_metrics.json", _fit_metrics(rows, config))
-    verification = _verification(rows, config)
+    verification = _verification(rows, config, lattices)
     _write_json(run_dir / "verification.json", verification)
     if not all(verification["even_total_syndrome_parity"].values()) or not verification["zero_error_clean"]:
         raise RuntimeError("A deterministic geometry check failed")

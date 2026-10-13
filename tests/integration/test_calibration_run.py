@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from quantum_lattice.lattice import square_lattice
 from quantum_lattice.simulation.calibration_experiment import (
     render_run, run_experiment, validate_config,
 )
@@ -31,10 +33,18 @@ class RunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="ql-calibration-") as temporary:
             root = Path(temporary)
             config = small_config()
-            directory = run_experiment(config, root, run_id="smoke")
+            with patch("quantum_lattice.simulation.calibration_experiment.square_lattice", wraps=square_lattice) as build:
+                directory = run_experiment(config, root, run_id="smoke")
+                self.assertEqual([call.args[0] for call in build.call_args_list], [3, 4])
             self.assertFalse((directory / "INCOMPLETE").exists())
             rows = json.loads((directory / "data/calibration.json").read_text())
             self.assertEqual(len(rows), 14)
+            topology = json.loads((directory / "lattices.json").read_text())
+            for side in [3, 4]:
+                self.assertEqual(topology[str(side)]["n_edges"], 2 * side**2)
+                self.assertEqual(topology[str(side)]["n_vertices"], side**2)
+                self.assertEqual(topology[str(side)]["n_faces"], side**2)
+                self.assertEqual(topology[str(side)]["vertex_degrees"], [4])
             self.assertEqual({tuple(row["stream_spawn_key"]) for row in rows},
                              {(side, index) for side in [3, 4] for index in range(7)})
             verification = json.loads((directory / "verification.json").read_text())

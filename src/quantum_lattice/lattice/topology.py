@@ -271,8 +271,13 @@ class Lattice:
 
     def _syndrome(self, errors: ArrayLike, indices: NDArray, mask: NDArray) -> NDArray:
         flags = self._binary_errors(errors)
-        incident_flags = np.take(flags, indices, axis=-1) & mask
-        return np.logical_xor.reduce(incident_flags, axis=-1, initial=False)
+        syndrome = np.zeros(flags.shape[:-1] + (indices.shape[0],), dtype=bool)
+        # Loop over the small incidence width, never over patterns or vertices.
+        # This avoids a large (..., vertices, width) gather and reduction;
+        # masks keep the same calculation valid for irregular degrees.
+        for slot in range(indices.shape[1]):
+            syndrome ^= np.take(flags, indices[:, slot], axis=-1) & mask[:, slot]
+        return syndrome
 
     def star_syndrome(self, errors: ArrayLike) -> NDArray[np.bool_]:
         """Return odd vertex-edge parity for flags of shape (..., n_edges)."""

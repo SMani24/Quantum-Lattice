@@ -24,6 +24,31 @@ Each phase has its own local results directory beside its runner. For Phase 0, s
 
 The per-phase `results/` directory is a local shortcut to that phase's retained artifacts under `codex material/artifacts/`. `latest/` selects the run being presented; timestamped runs stay available alongside it. Outputs are kept in one place and intentionally excluded from GitHub. After each phase, the report explains the method, findings, limitations, and file locations.
 
+## Lattice topology
+
+`lattice/topology.py` defines immutable `Vertex`, `Edge`, `Face`, and `Lattice` objects. Connectivity can be inspected through object properties; numerical star/plaquette calculations use read-only incidence tables. Sample flags stay separate, in arrays indexed by edge ID.
+
+```python
+import numpy as np
+from quantum_lattice.lattice import square_lattice
+
+lattice = square_lattice(4)
+vertex = lattice.vertices[0]
+print([edge.id for edge in vertex.incident_edges])
+print(lattice.edges[0].endpoints)
+print(lattice.faces[0].boundary_edges)
+
+z_errors = np.zeros((100, lattice.n_edges), dtype=bool)
+z_errors[:, 0] = True
+star_defects = lattice.star_syndrome(z_errors)  # shape (100, lattice.n_vertices)
+```
+
+The square constructor preserves the original edge order: `edge_id = 2*(y*L+x)+orientation`, with horizontal 0 and vertical 1. Phase 0 builds one lattice per size and reuses it across all probabilities and batches. Its optional prebuilt `lattice=` argument must use this square-factory convention; metadata alone does not establish that ordering.
+
+Other cell complexes can be supplied to `Lattice(n_vertices, edge_endpoints, face_boundaries, ...)`. Faces use ordered closed trails of distinct edges. Closed/periodic labels require two faces per edge; these are incidence checks, not a proof of embedding or manifold genus. Star and plaquette supports must intersect evenly. For physical channels, Z-error flags give star defects; X-error flags give plaquette defects.
+
+`metrics/lattice_calibration.py` derives independent-error means and covariance from connectivity, including unequal vertex degrees. `run_lattice_calibration_point()` samples these generic topologies. Only the periodic square constructor and square Figure 11/12 experiment are provided so far; the paper's D4 coefficients remain square-specific.
+
 ## Run the calibration
 
 See [the Phase 0 experiment description](experiments/phase0_figures_11_12/README.md) and its [configuration](configs/phase0_figures_11_12.json).
@@ -51,7 +76,7 @@ To regenerate figures from an existing run, pass `--render-only "codex material/
 python -m unittest discover -s tests -v
 ```
 
-The checks include exact small-lattice enumeration, periodic geometry, shared-edge covariance, seeded sampling, fitting, and the complete export pipeline. See [tests/README.md](tests/README.md).
+The checks include exact small-lattice enumeration, topology navigation/immutability, periodic geometry, star–plaquette commutation, shared-edge covariance, seeded sampling, fitting, and the complete export pipeline. See [tests/README.md](tests/README.md).
 
 ## Reproducibility
 

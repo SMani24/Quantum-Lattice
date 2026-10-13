@@ -22,7 +22,7 @@ The axes are horizontal p and vertical e_r. The paper's Figure 11 caption revers
 
 ## Sampling and fit
 
-The default run uses 41 equally spaced error probabilities in [0, 0.2], 10,000 independent whole-lattice patterns per point, batches of 256, and seed 20261012. NumPy PCG64 streams use `SeedSequence(seed, spawn_key=(L, probability_grid_index))`. Edge arrays have shape `(patterns, L, L, 2)` for horizontal and vertical edges; star defects are the XOR of four incident error flags.
+The default run uses 41 equally spaced error probabilities in [0, 0.2], 10,000 independent whole-lattice patterns per point, batches of 256, and seed 20261012. NumPy PCG64 streams use `SeedSequence(seed, spawn_key=(L, probability_grid_index))`. One immutable lattice topology is built per size and reused across all points/batches. New sample arrays have shape `(patterns, n_edges)`; square edge IDs preserve the original `(L,L,2)` C-order. Star defects are the XOR of incident error flags compiled from topology. The original square-array routine is retained as a regression reference.
 
 For independent errors, the exact forward relation is
 
@@ -52,6 +52,8 @@ python experiments/phase0_figures_11_12/run.py --render-only "codex material/art
 ```
 
 Both sampling and rendering require output beneath the local ignored material folder. Sampling and rendering retain separate source/input hashes.
+
+New runs also retain `lattices.json`, listing geometry, counts, degree sets, sample shape, and edge ordering. The Figure 11/12 runner intentionally still validates the square protocol. Generic connectivity, sampling, and analytical moments are available through the shared package; alternative periodic lattice constructors and their experiment configurations are later work.
 
 ## Initial validation
 
