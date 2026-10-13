@@ -10,8 +10,9 @@ the [short benchmark and runner instructions](experiments/phase1_sample_generati
 The dashboard selects full paper-domain datasets for seven lattice sizes,
 starting with L=4, and shows saved completion/resume status. A separate weak-field
 pilot remains available. The [paper-style MLP runner](experiments/baseline_mlp/README.md)
-uses a separate .venv-mlp environment, Hamiltonian group splits, validation-selected
-checkpoints, and explicit final-test evaluation. The full Phase 1 study remains ahead.
+uses a separate .venv-mlp environment, Hamiltonian group splits, validation-based
+early stopping, paired mode campaigns and explicit final-test evaluation.
+Saved runs have terminal summaries. The full Phase 1 study remains ahead.
 
 ## Repository layout
 
