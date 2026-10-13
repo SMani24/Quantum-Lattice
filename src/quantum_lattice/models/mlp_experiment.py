@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import platform
 import time
+import uuid
 
 import numpy as np
 import torch
@@ -75,12 +76,16 @@ def _expose(run, repo_root):
     shortcut = Path(repo_root) / "experiments/baseline_mlp/results"
     shortcut.parent.mkdir(parents=True, exist_ok=True)
     if not shortcut.exists() and not shortcut.is_symlink():
-        shortcut.symlink_to(os.path.relpath(root, shortcut.parent), target_is_directory=True)
+        try:
+            shortcut.symlink_to(os.path.relpath(root, shortcut.parent), target_is_directory=True)
+        except FileExistsError:
+            # Another independent run can finish at the same moment.
+            if not shortcut.is_symlink() or shortcut.resolve() != root:
+                raise
     latest = root / "latest"
     if latest.exists() and not latest.is_symlink():
         raise ValueError("The phase latest path must be a shortcut, not a real directory")
-    temporary = root / ".latest.tmp"
-    temporary.unlink(missing_ok=True)
+    temporary = root / f".latest-{uuid.uuid4().hex}.tmp"
     temporary.symlink_to(run.relative_to(root), target_is_directory=True)
     os.replace(temporary, latest)
 

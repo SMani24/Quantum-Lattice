@@ -1,4 +1,5 @@
 import copy
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -149,6 +150,15 @@ class MLPExperimentTests(unittest.TestCase):
     def test_outputs_cannot_escape_ignored_root(self):
         with self.assertRaisesRegex(ValueError, "must be below"):
             workflow.train(self.config, run_dir=self.repo / "published-results", repo_root=self.repo)
+
+    def test_independent_runs_can_publish_shortcuts_concurrently(self):
+        runs = [self.root / f"concurrent-{i}" for i in range(16)]
+        for run in runs:
+            run.mkdir(parents=True)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            list(executor.map(lambda run: workflow._expose(run, self.repo), runs))
+        self.assertIn((self.root / "latest").resolve(), runs)
+        self.assertFalse(list(self.root.glob(".latest-*.tmp")))
 
 
 if __name__ == "__main__":
