@@ -4,6 +4,11 @@ Use unit/ for geometry, parity, basis/observable identities, estimators, and met
 
 The initial Phase 0 reproduction had 18 checks. The topology foundation adds object/connectivity, generic-moment, and sampling regression checks for 49 unit/integration tests in total.
 
+Phase 1 adds solvable-state wavefunction/permutation oracles, detailed balance,
+short-chain exact comparisons, checkpoint/RNG and backend parity, statistical
+summaries, terminal restoration, and grouped-dataset pause/resume checks. These
+use tiny fixtures and short validation chains, never the configured full pilot.
+
 Run the unit and integration checks from the repository root:
 
 ```sh

@@ -4,6 +4,12 @@ Research on reconstructing and correcting toric-code Hamiltonian perturbations f
 
 Phase 0 implements the independent-error calibration in Figures 11 and 12, with fresh Monte Carlo data, an inverse-polynomial fit, and presentation exports. Subsequent work compares the paper-style MLP with spatial CNNs and physics-based inference.
 
+Phase 1 now has a checkpointable solvable-model sample generator with shared
+star/pair estimates, CPU workers, and terminal pause/resume controls. Start with
+the [short benchmark and runner instructions](experiments/phase1_sample_generation/README.md).
+The L=4 weak-field configuration is a pipeline pilot; neural-network training
+and the full Phase 1 study remain ahead.
+
 ## Repository layout
 
 | Path | Purpose |
