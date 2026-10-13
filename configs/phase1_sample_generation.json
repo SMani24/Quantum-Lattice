@@ -1,16 +1,23 @@
 {
   "schema_version": 1,
-  "lattice": {"type": "square_periodic", "L": 4},
+  "lattice": {
+    "type": "square_periodic",
+    "L": 4
+  },
   "fields": {
     "channel": "z_only",
     "distribution": "uniform",
-    "low": -0.2,
-    "high": 0.2
+    "low": -1.7,
+    "high": 1.7
   },
   "dataset": {
-    "hamiltonians": 16,
-    "seed": 20261013,
-    "split_fractions": {"train": 0.75, "validation": 0.125, "test": 0.125}
+    "hamiltonians": 9936,
+    "seed": 2626631461,
+    "split_fractions": {
+      "train": 0.75,
+      "validation": 0.125,
+      "test": 0.125
+    }
   },
   "sampler": {
     "backend": "auto",
@@ -19,6 +26,35 @@
     "thinning_sweeps": 20,
     "lazy_probability": 0.05
   },
-  "statistics": {"block_size_records": 45},
-  "execution": {"workers": 4, "chunk_sweeps": 1000}
+  "statistics": {
+    "block_size_records": 45
+  },
+  "execution": {
+    "workers": 4,
+    "chunk_sweeps": 5000
+  },
+  "storage": {
+    "state_encoding": "packed_bits",
+    "retain_estimator_records": false,
+    "retain_block_means": false
+  },
+  "provenance": {
+    "purpose": "Paper-domain sample generation with additional all-edge data",
+    "paper_supported": {
+      "training_channel": "z_only solvable branch",
+      "field_distribution": "Independent Uniform[-1.7,1.7] fields",
+      "training_examples_per_size": 7450,
+      "training_target": "One fixed edge under varied field backgrounds"
+    },
+    "our_choices": {
+      "training_hamiltonians_minimum": 7450,
+      "all_edges_retained": true,
+      "split": "Hamiltonian-level 75/12.5/12.5 percent balanced blocks",
+      "sampling_counts_source": "Supplied correction-time MC code; historical training settings unavailable",
+      "recording": "Sweep-boundary records with 5 percent lazy stays",
+      "phase_selection": "Historical topological-phase filter unavailable; no reconstructed filter is applied",
+      "measurement_scope": "Known-field simulation estimators; not experimental finite-shot X measurements",
+      "storage": "Lossless packed configurations and complete observable summaries; per-record estimators reconstructible"
+    }
+  }
 }

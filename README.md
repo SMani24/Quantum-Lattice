@@ -7,8 +7,9 @@ Phase 0 implements the independent-error calibration in Figures 11 and 12, with 
 Phase 1 now has a checkpointable solvable-model sample generator with shared
 star/pair estimates, CPU workers, and terminal pause/resume controls. Start with
 the [short benchmark and runner instructions](experiments/phase1_sample_generation/README.md).
-The L=4 weak-field configuration is a pipeline pilot; neural-network training
-and the full Phase 1 study remain ahead.
+The dashboard selects full paper-domain datasets for seven lattice sizes,
+starting with L=4, and shows saved completion/resume status. A separate weak-field
+pilot remains available. Neural-network training and the full Phase 1 study remain ahead.
 
 ## Repository layout
 

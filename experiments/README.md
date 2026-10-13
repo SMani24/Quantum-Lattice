@@ -5,12 +5,15 @@ Each experiment folder owns a thin runner and description. Shared calculations b
 | Folder | Planned work |
 |---|---|
 | phase0_figures_11_12/ | Numerical calibration and professor-facing plots |
-| baseline_mlp/ | Validated data generation, local MLP, and correction baseline |
+| phase1_sample_generation/ | Resumable sampling and selectable paper-domain datasets |
+| baseline_mlp/ | Later local MLP and correction baseline |
 | observable_cnn/ | Equal-information CNN, followed by signed-input comparisons |
 | inverse_ising/ | Physics-based signed inference in the solvable branch |
 | snapshot_models/ | Finite-shot observables versus raw snapshot sets |
 | transfer_and_feedback/ | Unseen sizes/distributions and repeated compensation |
 
-Only descriptions and the Phase 0 config exist now. Runners will be implemented as phases begin.
+Phase 0 and Phase 1 sample-generation runners are implemented. The Phase 1
+dashboard selects one size at a time and displays completed/paused datasets;
+training and later runners remain planned.
 
 Every run should have a unique output directory containing effective config, environment/provenance metadata, numeric results, and plots. Keep earlier runs when changing settings.

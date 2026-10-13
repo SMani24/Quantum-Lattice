@@ -9,17 +9,24 @@ from pathlib import Path
 import sys
 
 from quantum_lattice.data.generation import (
-    artifact_root, benchmark_config, inspect_run, prepare_run, run_generation, verify_run,
+    benchmark_config, inspect_run, prepare_run, run_generation, verify_run,
 )
+from quantum_lattice.data.campaign import dashboard, campaign_status
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "configs/phase1_sample_generation.json"
+DEFAULT_CAMPAIGN = ROOT / "configs/phase1_paper_domain_campaign.json"
 
 
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest="command")
+    campaign = commands.add_parser("campaign", help="select paper-domain datasets and see saved progress")
+    campaign.add_argument("--config", type=Path, default=DEFAULT_CAMPAIGN)
+    campaign.add_argument("--workers", type=int)
+    campaign.add_argument("--status", action="store_true", help="print campaign status without running anything")
+    campaign.add_argument("--plain", action="store_true", help="plain progress during generation")
     for name in ("run", "benchmark"):
         command = commands.add_parser(name)
         command.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -38,35 +45,18 @@ def parser():
     return result
 
 
-def menu():
-    print("\nQuantum Lattice · Phase 1 sample generation\n")
-    print("1  Short laptop benchmark (4 Hamiltonians, 5,000 sweeps each)")
-    print("2  Start the configured pilot (16 Hamiltonians, 100,000 sweeps each)")
-    print("3  Resume a saved run")
-    print("4  Inspect a saved run")
-    print("q  Exit\n")
-    choice = input("Choose [1]: ").strip().lower() or "1"
-    if choice == "q":
-        return None
-    if choice in {"1", "2"}:
-        command = "benchmark" if choice == "1" else "run"
-        workers = input("CPU workers [4]: ").strip() or "4"
-        return parser().parse_args([command, "--workers", workers])
-    if choice in {"3", "4"}:
-        path = input("Saved run directory: ").strip()
-        return parser().parse_args(["resume" if choice == "3" else "status", "--run-dir", path])
-    raise ValueError("choose 1, 2, 3, 4 or q")
-
-
 def main(argv=None):
     arguments = parser().parse_args(argv)
     if arguments.command is None:
         if not sys.stdin.isatty():
             parser().print_help()
             return 0
-        arguments = menu()
-        if arguments is None:
+        return dashboard(ROOT, DEFAULT_CAMPAIGN)
+    if arguments.command == "campaign":
+        if arguments.status:
+            print(json.dumps(campaign_status(ROOT, arguments.config), indent=2))
             return 0
+        return dashboard(ROOT, arguments.config, workers_override=arguments.workers, interactive=not arguments.plain)
     if arguments.command == "status":
         _, _, progress = inspect_run(arguments.run_dir)
         print(json.dumps({"run_dir": str(arguments.run_dir), "completed": sum(p["done"] for p in progress.values()),
@@ -82,11 +72,14 @@ def main(argv=None):
         if arguments.workers is not None:
             config["execution"]["workers"] = arguments.workers
         run_dir = prepare_run(ROOT, config, arguments.run_dir,
-                              purpose="benchmark" if arguments.command == "benchmark" else "pilot")
+                              purpose="benchmark" if arguments.command == "benchmark" else "dataset")
     else:
         run_dir = arguments.run_dir.resolve()
     print(f"\nSaved run: {run_dir}\n", flush=True)
-    print("p pauses after active chunks are saved; r resumes; q or Ctrl+C saves and exits.\n", flush=True)
+    if arguments.plain:
+        print("Plain progress; Ctrl+C saves active chunks and exits.\n", flush=True)
+    else:
+        print("p pauses after active chunks are saved; r resumes; q or Ctrl+C saves and exits.\n", flush=True)
     result = run_generation(ROOT, run_dir, workers=arguments.workers, interactive=not arguments.plain)
     print(f"\n{result['state'].capitalize()}: {result['completed']}/{result['total']} Hamiltonians.")
     print(f"Session wall time: {result['elapsed_seconds']:.2f} seconds.")
@@ -99,10 +92,11 @@ def main(argv=None):
         estimate = startup_and_io + compute_seconds / result["workers"] * pilot_attempts / benchmark_attempts
         timing = {**result, "benchmark_config": effective,
                   "pilot_config": original, "estimated_pilot_seconds": estimate,
+                  "estimated_dataset_seconds": estimate,
                   "estimated_pilot_attempts": pilot_attempts,
-                  "estimate_scope": "rough same-host extrapolation from short weak-field chains; startup and I/O approximated, mixing not certified"}
+                  "estimate_scope": "rough same-host extrapolation from short chains; startup and I/O approximated, full checkpoint/finalization costs and mixing not certified"}
         (run_dir / "benchmark.json").write_text(json.dumps(timing, indent=2) + "\n")
-        print(f"Rough configured-pilot estimate on this machine with {result['workers']} workers: {estimate:.1f} seconds.")
+        print(f"Rough configured-dataset estimate on this machine with {result['workers']} workers: {estimate:.1f} seconds.")
         print("This short run measures speed; it does not certify burn-in or mixing.")
     if result["state"] == "paused":
         print(f'Continue later: python experiments/phase1_sample_generation/run.py resume --run-dir "{run_dir}"')
