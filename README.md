@@ -10,9 +10,11 @@ the [short benchmark and runner instructions](experiments/phase1_sample_generati
 The dashboard selects full paper-domain datasets for seven lattice sizes,
 starting with L=4, and shows saved completion/resume status. A separate weak-field
 pilot remains available. The [paper-style MLP runner](experiments/baseline_mlp/README.md)
-uses a separate .venv-mlp environment, Hamiltonian group splits, validation-based
-early stopping, paired mode campaigns and explicit final-test evaluation.
-Saved runs have terminal summaries. The full Phase 1 study remains ahead.
+uses the same `.venv` as the simulations, Hamiltonian group splits,
+validation-based early stopping and explicit final-test evaluation.
+Its saved queue trains ready lattice sizes in both data modes, one model at a
+time, with pause/resume and comparison tables. Saved runs have terminal
+summaries. The full Phase 1 study remains ahead.
 
 ## Repository layout
 
@@ -59,18 +61,36 @@ Other cell complexes can be supplied to `Lattice(n_vertices, edge_endpoints, fac
 
 `metrics/lattice_calibration.py` derives independent-error means and covariance from connectivity, including unequal vertex degrees. `run_lattice_calibration_point()` samples these generic topologies. Only the periodic square constructor and square Figure 11/12 experiment are provided so far; the paper's D4 coefficients remain square-specific.
 
+## One Python environment
+
+Use `.venv` for calibration, Monte Carlo generation, training, and tests.
+It contains the tested NumPy, Numba, Matplotlib, and CPU PyTorch versions.
+From the repository root, set it up once with Python 3.10–3.13
+(3.10.12 matches the retained research runs):
+
+```sh
+python3 scripts/setup_environment.py
+source .venv/bin/activate
+```
+
+After reopening a terminal, only `source .venv/bin/activate` is needed.
+Every runner then uses `python`, including
+`python experiments/baseline_mlp/run.py`. The setup script reuses `.venv`,
+installs missing pinned dependencies from `requirements.txt`, and leaves
+satisfied versions in place. `python3 scripts/setup_environment.py --check`
+checks the imports, Numba compilation, and a tiny Torch backward pass without
+installing anything. See [scripts/README.md](scripts/README.md) for offline setup.
+
+The old `.venv-mlp` is retained locally as a reversible backup; current commands
+all use `.venv`. Existing checkpoints retain their recorded training settings
+and version checks.
+
 ## Run the calibration
 
 See [the Phase 0 experiment description](experiments/phase0_figures_11_12/README.md) and its [configuration](configs/phase0_figures_11_12.json).
-
-Use Python 3.10 or later. From the repository root:
+With `.venv` activated:
 
 ```sh
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip 'setuptools>=64'
-python -m pip install -r requirements-phase0.txt
-python -m pip install --no-build-isolation --no-deps -e .
 python experiments/phase0_figures_11_12/run.py --config configs/phase0_figures_11_12.json
 ```
 

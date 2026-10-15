@@ -23,7 +23,7 @@ if torch is not None:
     from quantum_lattice.models.mlp_training import TrainSession
 
 
-@unittest.skipIf(torch is None, "Install the separate MLP environment")
+@unittest.skipIf(torch is None, "Use the project .venv with PyTorch")
 class MLPExperimentTests(unittest.TestCase):
     def setUp(self):
         fixture = data_fixture.MLPDataTests()

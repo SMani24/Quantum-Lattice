@@ -12,19 +12,20 @@ use tiny fixtures and short validation chains, never the configured full pilot.
 The MLP checks add independent NumPy forward calculations, grouped verified data
 loading with test isolation, raw regression/whole-Hamiltonian bootstrap oracles,
 safe checkpoints, identical interrupted CPU training, finalization recovery and
-plot/terminal exports. Use the separate MLP environment to include Torch checks:
+plot/terminal exports. Use the shared project environment for all checks:
 
 ```sh
-.venv-mlp/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
-Torch-dependent checks skip when Torch is absent, so the Monte Carlo environment
-does not need to change. Synthetic fixture errors are not research accuracy.
+The unified `requirements.txt` includes Torch and Numba, so all checks can run
+in one environment. Torch-dependent checks still skip on deliberately minimal
+installations. Synthetic fixture errors are not research accuracy.
 
 Run the unit and integration checks from the repository root:
 
 ```sh
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 The calibration tests cover periodic edge incidence, syndrome cancellation, exact probability/variance identities, reproducible sampling, and polynomial fitting. Exhaustive enumeration of all 2^18 L=3 edge-error patterns checks the covariance-aware whole-pattern variance. Integration checks run a small seeded experiment, inspect PDF/PNG signatures and metadata, regenerate exports without changing numeric data, and reject overwrites or outputs outside the ignored material folder. Earlier author-code audits remain under codex material/code-reference/validation/.

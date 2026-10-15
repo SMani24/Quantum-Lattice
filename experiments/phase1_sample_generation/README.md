@@ -7,7 +7,10 @@ other experiments remain later steps.
 
 ## Open the dashboard
 
-Use the repository's `.venv`: Python 3.10.12, NumPy 2.2.6 and Numba 0.63.1.
+Use the repository's shared `.venv`: Python 3.10.12, NumPy 2.2.6 and Numba 0.63.1,
+with CPU Torch available for neural-network training in the same environment.
+Set it up once with `python3 scripts/setup_environment.py`; no environment
+switch is needed between generation and training.
 From the repository root:
 
 ```sh

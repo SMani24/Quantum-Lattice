@@ -4,7 +4,7 @@ Implemented and validated with a full seeded run on 12 October 2026.
 
 Local outputs are in this experiment's `results/` directory. Start with `results/README.md` for the file map and `results/latest/RESULTS.md` for the detailed findings. The professor presentation is `results/latest/presentation/figures_11_12_presentation.pdf`. This local shortcut points to the preserved artifact directory and is excluded from Git.
 
-Use [configs/phase0_figures_11_12.json](../../configs/phase0_figures_11_12.json). It declares our settings rather than claiming recovery of the original missing grid/sample counts. After installing the package as described in the root README:
+Use [configs/phase0_figures_11_12.json](../../configs/phase0_figures_11_12.json). It declares our settings rather than claiming recovery of the original missing grid/sample counts. Set up the shared `.venv` with `python3 scripts/setup_environment.py` from the repository root, then activate it with `source .venv/bin/activate`. The same environment runs every phase:
 
 ```sh
 python experiments/phase0_figures_11_12/run.py --config configs/phase0_figures_11_12.json

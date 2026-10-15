@@ -14,7 +14,7 @@ if torch is not None:
     from quantum_lattice.models.mlp_training import TrainSession
 
 
-@unittest.skipIf(torch is None, "PyTorch is installed in the separate MLP environment")
+@unittest.skipIf(torch is None, "Use the project .venv with PyTorch")
 class TrainingSessionTests(unittest.TestCase):
     def setUp(self):
         rng = np.random.default_rng(3)

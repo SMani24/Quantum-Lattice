@@ -8,6 +8,9 @@ Future learning configs should identify lattice sizes, field distribution, phase
 
 Actual outputs go under codex material/artifacts/, not beside configurations.
 
+All experiment configurations use the same project `.venv`; install it once
+with `python3 scripts/setup_environment.py` from the repository root.
+
 For Phase 1, `phase1_paper_domain_campaign.json` defines all seven paper training
 sizes and at least 7,450 independent training Hamiltonians per size.
 `phase1_sample_generation.json` is its full L=4 profile;

@@ -12,7 +12,7 @@ if torch is not None:
     from quantum_lattice.models.mlp import PaperMLP
 
 
-@unittest.skipIf(torch is None, "PyTorch is installed in the separate MLP environment")
+@unittest.skipIf(torch is None, "Use the project .venv with PyTorch")
 class PaperMLPTests(unittest.TestCase):
     def test_dense_shapes_relu_positions_and_initialization(self):
         model = PaperMLP()
