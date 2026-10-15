@@ -228,7 +228,7 @@ def _check_child_settings(run, base, mode):
             raise ValueError("Saved child run settings differ from the campaign")
 
 
-def train_both(config, *, campaign_dir=None, resume=False, interactive=True,
+def _train_both(config, *, campaign_dir=None, resume=False, interactive=True,
                repo_root=REPO_ROOT, max_chunks=None) -> Path:
     """Train paper_size then all_edges; pausing stops the sequence immediately.
 
@@ -289,15 +289,19 @@ def train_both(config, *, campaign_dir=None, resume=False, interactive=True,
                     raise ValueError("Common dataset metadata changed between campaign models")
                 entry = record["runs"][mode]
                 run = _child_dir(campaign, entry["path"])
-                _check_child_settings(run, base, mode)
+                has_checkpoint = all((run / name).is_file() for name in ("config.json", "status.json", "latest.pt"))
+                if has_checkpoint:
+                    _check_child_settings(run, base, mode)
                 summary = run_summary(run)
                 if summary["state"] in FINISHED_STATES:
+                    if not has_checkpoint:
+                        raise ValueError("Finished child is missing checkpoint files; preserve it for inspection")
                     entry["state"] = summary["state"]
                     if mode not in record["completed_modes"]:
                         record["completed_modes"].append(mode)
                     _atomic_json(campaign / "campaign.json", record)
                     continue
-                has_config = (run / "config.json").exists()
+                has_config = has_checkpoint
                 if run.exists() and any(run.iterdir()) and not has_config:
                     new_path, previous = _fresh_retry_path(campaign, mode, entry["path"])
                     entry.setdefault("uninitialized_attempts", []).append(previous)
@@ -309,14 +313,16 @@ def train_both(config, *, campaign_dir=None, resume=False, interactive=True,
                 record.update(state="training", current_mode=mode)
                 entry["state"] = "resuming" if has_config else "starting"
                 _atomic_json(campaign / "campaign.json", record)
-                result = workflow.train(child_config, run_dir=run, resume=has_config,
-                                        interactive=interactive, repo_root=repo_root, max_chunks=max_chunks)
+                from .mlp_terminal import training_context, training_stop_requested
+                with training_context(size=base["lattice_size"], mode=mode):
+                    result = workflow.train(child_config, run_dir=run, resume=has_config,
+                                            interactive=interactive, repo_root=repo_root, max_chunks=max_chunks)
                 returned = Path(result).resolve()
                 if returned != run:
                     raise ValueError("Training returned a different campaign child directory")
                 summary = run_summary(run)
                 entry["state"] = summary["state"]
-                if summary["state"] not in FINISHED_STATES:
+                if summary["state"] not in FINISHED_STATES or training_stop_requested():
                     record.update(state="paused", current_mode=mode)
                     _atomic_json(campaign / "campaign.json", record)
                     return campaign
@@ -334,3 +340,13 @@ def train_both(config, *, campaign_dir=None, resume=False, interactive=True,
             record.update(state="failed", error=f"{type(error).__name__}: {error}")
             _atomic_json(campaign / "campaign.json", record)
             raise
+
+
+def train_both(config, *, campaign_dir=None, resume=False, interactive=True,
+               repo_root=REPO_ROOT, max_chunks=None) -> Path:
+    """Train both modes, propagating terminal stop requests across boundaries."""
+    from .mlp_terminal import training_context
+    with training_context():
+        return _train_both(config, campaign_dir=campaign_dir, resume=resume,
+                           interactive=interactive, repo_root=repo_root,
+                           max_chunks=max_chunks)

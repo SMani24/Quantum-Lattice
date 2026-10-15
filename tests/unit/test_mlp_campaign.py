@@ -58,6 +58,7 @@ class MLPCampaignTests(unittest.TestCase):
         if outcome == "interrupt":
             raise KeyboardInterrupt
         self.write(run_dir / "config.json", config)
+        (run_dir / "latest.pt").write_bytes(b"fixture checkpoint")
         self.write(run_dir / "manifest.json", {"row_counts": {"train": 3, "validation": 2, "test": 36}})
         self.write(run_dir / "status.json", {"state": outcome, "step": 40 if outcome == "paused" else 100,
                    "max_steps": 100, "epoch": 2, "training_row_passes": 1.5,

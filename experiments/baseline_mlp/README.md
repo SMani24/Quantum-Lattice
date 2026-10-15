@@ -10,40 +10,61 @@ each size. Odd L is supported by the square toric-code stabilizers and sampler.
 
 ## Environment and launch
 
-Use the separate **.venv-mlp** environment. The existing .venv remains the
-Monte Carlo environment. CPU PyTorch 2.7.1 is installed locally and checked.
-From this experiment directory:
+Use the project's **.venv** for sampling, calibration, and neural networks.
+From the repository root, set it up or check it with:
 
 ```bash
-../../.venv-mlp/bin/python run.py
+python3 scripts/setup_environment.py
+python3 scripts/setup_environment.py --check
+source .venv/bin/activate
 ```
 
-The menu shows dataset readiness, selects L and training mode, resumes saved
-runs/campaigns, and performs final evaluation only when explicitly selected.
-Option6 trains paper_size then all_edges; option7 resumes that saved sequence.
-Option8 switches between early stopping and a fixed 10,000-update baseline.
-Option5 lists validation summaries and shows the selected run's short summary,
-stop reason, test status and RESULTS.md path. Summaries also print after training
-or evaluation and are read from small JSON records, without loading a model.
-`p` pauses,
-`r` resumes, and `q` saves and exits. Ctrl+C keeps the last completed optimizer
-chunk; at most the current 100-update chunk is repeated after restart. A completed
-dataset with passing verification is required. Loading verifies checksums and
-feature/label identities; the initial delay is data loading, not stalled training.
-
-To recreate this environment from the repository root:
+Then launch from the repository root:
 
 ```bash
-python3 -m venv --system-site-packages .venv-mlp
-.venv-mlp/bin/python -m pip install 'setuptools>=64'
-.venv-mlp/bin/python -m pip install -r requirements-mlp.txt --index-url https://download.pytorch.org/whl/cpu
-.venv-mlp/bin/python -m pip install --no-build-isolation -e .
+python experiments/baseline_mlp/run.py
 ```
 
-The CPU wheel follows [PyTorch's version-specific installation instructions](https://pytorch.org/get-started/previous-versions/).
-GPU support would require a compatible CUDA wheel in this separate environment;
-the provided CPU installation cannot use CUDA. One CPU thread is the reproducible
-default for this small network. Other installed dependencies are recorded per run.
+Or, from this experiment directory, without activating:
+
+```bash
+../../.venv/bin/python run.py
+```
+
+The main menu has four actions:
+
+1. **Train all**: Enter selects all verified ready lattice sizes, then Enter
+   selects both `paper_size` and `all_edges`. It creates one saved queue and
+   trains one fresh model at a time, size by size. Type e.g. `3,8,12` to select
+   a subset instead. With all seven banks ready, both modes mean **14 models**.
+2. **Continue**: resume a saved queue, an independent run, or an older paired
+   campaign. Completed queue models are skipped; unfinished models retain
+   their saved settings and optimizer state.
+3. **Results**: compact queue/model tables and selected summaries. A separate
+   explicit action evaluates every frozen model in a finished queue on final
+   test data. Training never calls that action.
+4. **Advanced**: one-size training, individual final-test evaluation, and
+   stopping/device settings for new queues. The main screen always shows the
+   actual safety ceiling and stopping strategy from the selected configuration.
+
+During training, `p` pauses, `r` resumes, and `q` saves and exits the **whole
+queue**, including a key pressed during the last optimizer chunk. Ctrl+C stops
+safely at the last completed checkpoint; at most the current 100-update chunk
+is repeated after restart. No model is discarded. Resume uses the original
+queue's immutable settings, frozen dataset identities, and completed models.
+Pause remains in the running terminal; use `q` if closing the terminal or
+restarting the computer. Loading verifies checksums and feature/label
+identities, so its initial delay is data verification rather than training.
+If a pause arrives during a model's final chunk, that model finishes and the
+queue stops before the next model; select Continue from the menu to proceed.
+
+The setup script installs the pinned CPU PyTorch dependency into the same
+`.venv` while retaining the existing sampler packages. A preexisting
+`.venv-mlp` is left intact as a fallback; new commands do not require it.
+One CPU thread remains the reproducible default for this small network.
+Other dependency versions are recorded per run. Exact continuation rejects
+incompatible software/data/source changes; merely using a different virtual
+environment path does not change the recorded environment identity.
 
 ## Protocol and row counts
 
@@ -60,7 +81,7 @@ the same group. Modes use the same frozen all-edge test bank:
 two training Hamiltonians stay unused. `all_edges` uses every saved training edge.
 Neighboring rows share a background and are correlated; they are not extra
 independent Hamiltonians. With early stopping, both modes use the same stopping
-policy and 200,000-update safety ceiling; their actual update counts can differ.
+policy and configured safety ceiling; their actual update counts can differ.
 The fixed-budget option gives both 10,000 optimizer updates. Neither strategy
 implies the same number of data passes. Actual processed examples, equivalent
 row passes, best update and stop reason are recorded in status/results.
@@ -75,12 +96,16 @@ not finite-shot experimental inputs; the historical phase filter is unavailable.
 
 Early stopping is enabled by default. Its settings are:
 
-| Setting | Default |
+| Setting | Published template default |
 |---|---:|
 | `training.max_steps` | 200,000 safety ceiling |
 | `early_stopping.min_steps` | 10,000 minimum updates |
 | `early_stopping.patience` | 20 eligible validation checks |
 | `early_stopping.min_delta` | 0.000001 absolute validation MSE |
+
+The local configuration can override these template values; the main menu
+shows the actual ceiling for new queues. Saved runs retain their recorded
+ceiling when resumed.
 
 Every scheduled validation check updates the meaningful-improvement reference
 if validation MSE decreases by more than min_delta. This resets patience. At and
@@ -107,14 +132,22 @@ must not drive tuning; after test inspection, further tuning needs a new test ba
 ## Commands
 
 ```bash
-../../.venv-mlp/bin/python run.py train --size 4 --mode paper_size
-../../.venv-mlp/bin/python run.py train --size 4 --mode all_edges
-../../.venv-mlp/bin/python run.py train-both --size 4
-../../.venv-mlp/bin/python run.py train --size 4 --mode paper_size --stopping fixed
-../../.venv-mlp/bin/python run.py resume-both --campaign-dir '/absolute/paired/campaign/path'
-../../.venv-mlp/bin/python run.py resume --run-dir '/absolute/path/printed/by/training'
-../../.venv-mlp/bin/python run.py evaluate --run-dir '/absolute/path/printed/by/training'
-../../.venv-mlp/bin/python run.py status --run-dir '/absolute/path/printed/by/training'
+# All ready sizes, both modes, one model at a time:
+../../.venv/bin/python run.py train-all
+# Selected sizes, or only one mode:
+../../.venv/bin/python run.py train-all --sizes 3 8 12 --modes paper_size all_edges
+../../.venv/bin/python run.py train-all --sizes 4 --modes all_edges --stopping fixed
+../../.venv/bin/python run.py resume-queue --queue-dir '/absolute/queue/path'
+../../.venv/bin/python run.py queue-status --queue-dir '/absolute/queue/path'
+# Explicitly open final tests only after reviewing validation-selected models:
+../../.venv/bin/python run.py evaluate-queue --queue-dir '/absolute/queue/path'
+# Existing individual/paired commands remain available:
+../../.venv/bin/python run.py train --size 4 --mode paper_size
+../../.venv/bin/python run.py train-both --size 4
+../../.venv/bin/python run.py resume-both --campaign-dir '/absolute/paired/campaign/path'
+../../.venv/bin/python run.py resume --run-dir '/absolute/run/path'
+../../.venv/bin/python run.py evaluate --run-dir '/absolute/run/path'
+../../.venv/bin/python run.py status --run-dir '/absolute/run/path'
 ```
 
 Starting a new run always creates a separate directory. Resume loads saved
@@ -123,6 +156,18 @@ weights, shuffle position and RNG. Source/data/environment changes reject exact
 continuation. The verified bit-identical resume guarantee is within unchanged
 CPU software, hardware and thread count, not across machines or device types.
 Training and evaluation use a per-run process lock.
+
+Queues save `queue.json`, `comparison.json`, `comparison.csv`, and `RESULTS.md`
+under `queues/<id>/`. They preflight the selected ready banks and freeze their
+metadata identities before starting. A failure or stop leaves a resumable queue;
+completed models are never retrained by resume. Existing independent/paired
+runs are preserved and are not silently imported into a new queue. For a new
+comparison, all selected models therefore use the queue's recorded settings.
+The comparison table labels training/validation values separately from final
+test values: the two modes have different validation row selections, so their
+validation MSEs alone are not matched final-test accuracy. Explicit queue
+evaluation uses the same frozen all-edge test bank within each size, skips
+already evaluated models, and can be continued by repeating the command.
 
 Paired campaigns create two fresh independent models with the same configured
 initialization seed and unchanged Hamiltonian groups. Common dataset metadata
@@ -148,6 +193,7 @@ Shared code:
 - `src/quantum_lattice/models/mlp_experiment.py`: checkpoint/run/evaluation workflow.
 - `src/quantum_lattice/models/mlp_terminal.py`: terminal progress and controls.
 - `src/quantum_lattice/models/mlp_campaign.py`: saved summaries and paired training/resume.
+- `src/quantum_lattice/models/mlp_queue.py`: ready-bank selection, sequential queues, comparisons, and explicit batch evaluation.
 - `src/quantum_lattice/metrics/regression.py`: regression and group uncertainty.
 - `src/quantum_lattice/plotting/mlp.py`: learning and final-test figures.
 
@@ -155,7 +201,11 @@ The thin `run.py` handles menu/arguments. All generated files are ignored under
 `codex material/artifacts/phase1_mlp/`, exposed locally at **results/**. Each run
 has a RESULTS.md, config, provenance, data selection, status, latest checkpoint,
 history and validation-selected weights. `figures/` contains PNG/PDF exports.
-Paired campaigns live under `campaigns/<id>/`, with campaign.json recording
+Queues live under `queues/<id>/`; their records link each size/mode to its child
+run. Two-mode queue children use the existing paired-campaign mechanism under
+`campaigns/queue-<id>-L<size>/`, while single-mode children live within the queue.
+The queue's comparison files and reports are the entry point for the whole batch.
+Older paired campaigns live under `campaigns/<id>/`, with campaign.json recording
 ordered child paths, immutable settings, dataset hashes and completion state.
 Explicit evaluation adds prediction NPZ/CSV, per-Hamiltonian metrics CSV,
 test metrics JSON and evaluation provenance. Raw configurations remain under

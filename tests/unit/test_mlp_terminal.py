@@ -3,7 +3,7 @@
 import io
 import unittest
 
-from quantum_lattice.models.mlp_terminal import TrainingConsole
+from quantum_lattice.models.mlp_terminal import TrainingConsole, training_context, training_stop_requested
 
 
 class TrainingConsoleTests(unittest.TestCase):
@@ -61,6 +61,54 @@ class TrainingConsoleTests(unittest.TestCase):
         self.assertIn("ETA ~0:00:00", output.getvalue())
         self.assertIn("early stop checks 20/20", output.getvalue())
         self.assertIn("stop reason early_stopping", output.getvalue())
+
+    def test_context_labels_are_nested_and_restored(self):
+        output = io.StringIO()
+        with training_context(size=8, queue_index=3, queue_total=14):
+            with training_context(mode="all_edges"):
+                with TrainingConsole(10, interactive=False, output_stream=output) as console:
+                    console.render({"step": 1})
+            self.assertFalse(training_stop_requested())
+        self.assertIn("L=8 | all_edges | model 3/14", output.getvalue())
+        with TrainingConsole(10, interactive=False, output_stream=output) as console:
+            self.assertEqual(console.training_context, {})
+
+    def test_pending_quit_at_final_chunk_stops_parent_sequence(self):
+        with training_context(size=4):
+            with training_context(mode="paper_size"):
+                with TrainingConsole(10, interactive=False, output_stream=io.StringIO()) as console:
+                    # The key arrives after the engine's last loop poll.
+                    console._commands.append("quit")
+                    self.assertFalse(training_stop_requested())
+            self.assertTrue(training_stop_requested())
+        self.assertFalse(training_stop_requested())
+
+    def test_quit_poll_sets_stop_flag_before_terminal_exit(self):
+        with training_context():
+            with TrainingConsole(10, interactive=False, output_stream=io.StringIO()) as console:
+                console._commands.append("quit")
+                self.assertEqual(console.poll(), "quit")
+                self.assertTrue(training_stop_requested())
+
+    def test_pending_pause_at_final_chunk_stops_parent_sequence(self):
+        with training_context():
+            with TrainingConsole(10, interactive=False, output_stream=io.StringIO()) as console:
+                console._commands.append("pause")
+            self.assertTrue(training_stop_requested())
+
+    def test_pending_pause_then_resume_at_final_chunk_allows_next_model(self):
+        with training_context():
+            with TrainingConsole(10, interactive=False, output_stream=io.StringIO()) as console:
+                console._commands.extend(("pause", "resume"))
+            self.assertFalse(training_stop_requested())
+
+    def test_interactive_panel_is_five_lines(self):
+        output = io.StringIO()
+        with TrainingConsole(10, interactive=False, output_stream=output) as console:
+            console.interactive = True  # Exercise renderer without touching a terminal.
+            console.render({"step": 1, "train_mse": .1, "validation_mse": .2})
+            console.interactive = False
+        self.assertEqual(output.getvalue().count("\n"), 5)
 
 
 if __name__ == "__main__":
