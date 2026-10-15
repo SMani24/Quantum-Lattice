@@ -98,6 +98,7 @@ def run_summary(run_dir) -> dict:
         except (TypeError, ValueError):
             pass
     return {"run_dir": str(run), "L": config.get("lattice_size"), "mode": config.get("mode"),
+            "device": status.get("device", manifest.get("device", training.get("device"))),
             "state": state, "step": status.get("step"),
             "max_steps": status.get("max_steps", training.get("max_steps")),
             "epoch": status.get("epoch"), "training_row_passes": status.get("training_row_passes"),
@@ -139,6 +140,7 @@ def format_run_summary(summary) -> str:
     early = summary.get("early_stopping", {})
     lines = [f"L={summary.get('L') or '?'} · {summary.get('mode') or 'unknown mode'} · {str(summary.get('state', 'unknown')).upper()}",
              f"Optimizer updates: {_number(summary.get('step'))}/{_number(summary.get('max_steps'))} · elapsed {_elapsed(summary.get('elapsed_seconds'))}"]
+    lines.append(f"Compute device: {summary.get('device') or 'not recorded'}")
     if summary.get("epoch") is not None or summary.get("training_row_passes") is not None:
         lines.append(f"Shuffled epoch: {_number(summary.get('epoch'))} · equivalent row passes: {_number(summary.get('training_row_passes'))}")
     lines.append("Rows: train " + _number(rows.get("train")) + " · validation " + _number(rows.get("validation")) + " · test " + _number(rows.get("test")))

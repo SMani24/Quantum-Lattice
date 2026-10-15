@@ -23,7 +23,7 @@ import torch
 
 from quantum_lattice.data.mlp_data import load_learning_data
 from quantum_lattice.metrics.regression import regression_report, per_hamiltonian_metrics
-from quantum_lattice.models.mlp_training import TrainSession
+from quantum_lattice.models.mlp_training import TrainSession, resolve_device
 from quantum_lattice.models.mlp_terminal import TrainingConsole
 from quantum_lattice.plotting.mlp import plot_learning_history, plot_test_predictions
 
@@ -133,7 +133,17 @@ def _source_hashes():
 def _environment():
     return {"python": platform.python_version(), "numpy": np.__version__,
             "torch": str(torch.__version__), "machine": platform.machine(),
-            "platform": platform.platform()}
+            "platform": platform.platform(), "cuda_runtime": torch.version.cuda}
+
+
+def _accelerator(device):
+    if device.type != "cuda":
+        return {"type": device.type}
+    properties = torch.cuda.get_device_properties(device)
+    return {"type": "cuda", "name": properties.name,
+            "capability": [properties.major, properties.minor],
+            "total_memory_bytes": properties.total_memory,
+            "cublas_workspace_config": os.environ.get("CUBLAS_WORKSPACE_CONFIG")}
 
 
 def validate_config(config):
@@ -239,6 +249,11 @@ def _restore(run, config, data):
         raise ValueError("Training environment changed; exact continuation requires the saved environment")
     if manifest["dataset_fingerprint"] != data.provenance["source_fingerprint"]:
         raise ValueError("Learning dataset or row selection changed")
+    if "accelerator" in manifest:
+        device = resolve_device(config["training"].get("device", "auto"),
+                                config["training"].get("deterministic", True))
+        if manifest["accelerator"] != _accelerator(device):
+            raise ValueError("Training accelerator changed; start a new run")
     session = TrainSession(data.train.x, data.train.y, data.validation.x, data.validation.y,
                            config["training"], checkpoint=payload["session"])
     return session, payload["history"], manifest, payload["elapsed_seconds"]
@@ -256,6 +271,8 @@ L={config['lattice_size']}, mode `{config['mode']}`. The paper architecture
 These inputs are known-field simulation estimators, not physical measurement shots.
 
 Saved state: **{status['state']}**, optimizer update {status['step']}/{status['max_steps']}.
+Compute device: **{status.get('device', manifest.get('device', 'not recorded'))}**.
+Accelerator details: {json.dumps(manifest.get('accelerator', {}))}.
 Training examples processed: {status['training_examples_seen']}; equivalent full row passes: {status['training_row_passes']:.4f}.
 Training/validation/final-test row counts: {counts['train']}/{counts['validation']}/{counts['test']}.
 Best validation MSE: {status['best_validation_mse']}; selected update: {status['best_step']}.
@@ -317,6 +334,10 @@ def train(config=None, *, run_dir=None, resume=False, interactive=True,
     with _lock(run):
         if resume and _read(run / "status.json")["state"] in {"trained", "evaluated", "evaluating"}:
             raise ValueError("Training already finished; use evaluate or start a new run")
+        device = resolve_device(config["training"].get("device", "auto"),
+                                config["training"].get("deterministic", True))
+        hardware = _accelerator(device)
+        print(f"Compute device: {device}" + (f" | {hardware['name']}" if device.type == "cuda" else ""), flush=True)
         print("Verifying training/validation summaries and checksums; test payloads stay closed.", flush=True)
         data = _load_data(config, repo_root)
         if resume:
@@ -333,7 +354,8 @@ def train(config=None, *, run_dir=None, resume=False, interactive=True,
                         "dataset_fingerprint": data.provenance["source_fingerprint"],
                         "row_counts": data.provenance["row_counts"],
                         "hamiltonian_counts": data.provenance["hamiltonian_counts"],
-                        "device": str(session.device), "architecture": [3, 128, 150, 128, 1]}
+                        "device": str(session.device), "accelerator": hardware,
+                        "architecture": [3, 128, 150, 128, 1]}
             _atomic_json(run / "config.json", config)
             _atomic_json(run / "manifest.json", manifest)
             _atomic_json(run / "data_selection.json", data.provenance)
@@ -408,6 +430,8 @@ def evaluate(run_dir, *, repo_root=REPO_ROOT):
         if status["state"] not in {"trained", "evaluated", "evaluating"}:
             raise ValueError("Finish training before opening the final test set")
         config = validate_config(_read(run / "config.json"))
+        resolve_device(config["training"].get("device", "auto"),
+                       config["training"].get("deterministic", True))
         if _sha(run / "best_model.pt") != status.get("best_model_sha256"):
             raise ValueError("Frozen validation-selected model checksum changed")
         # Verify training identity before any final-test payload is read.

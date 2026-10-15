@@ -10,12 +10,38 @@ from __future__ import annotations
 import copy
 import hashlib
 import math
+import os
 from typing import Any
 
 import numpy as np
 import torch
 
 from .mlp import PaperMLP
+
+
+def resolve_device(requested: str, deterministic: bool = True) -> torch.device:
+    """Configure cuBLAS before CUDA initialization and reject silent fallback.
+
+    Deterministic CUDA matrix multiplications require a cuBLAS workspace setting
+    before the first CUDA BLAS handle is created. Both documented deterministic
+    settings are accepted; a conflicting explicit setting is never overwritten.
+    """
+    if requested not in ("auto", "cpu", "cuda"):
+        raise ValueError("device must be auto, cpu, or cuda")
+    if not isinstance(deterministic, bool):
+        raise ValueError("deterministic must be a boolean")
+    if requested != "cpu" and deterministic:
+        workspace = os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+        if workspace not in (":4096:8", ":16:8"):
+            raise ValueError(
+                "Deterministic CUDA training requires CUBLAS_WORKSPACE_CONFIG="
+                ":4096:8 (or :16:8); change the existing environment setting "
+                "before starting Python"
+            )
+    available = requested != "cpu" and torch.cuda.is_available()
+    if requested == "cuda" and not available:
+        raise ValueError("CUDA was requested but is unavailable")
+    return torch.device("cuda" if available else "cpu")
 
 
 def _cpu_copy(value: Any) -> Any:
@@ -113,6 +139,8 @@ class TrainSession:
         checkpoint: dict[str, Any] | None = None,
     ) -> None:
         self.config = _config(config)
+        # Fail before copying or hashing a potentially large training bank.
+        self.device = resolve_device(self.config["device"], self.config["deterministic"])
         arrays = (
             _array(train_x, 3, "train_x"),
             _array(train_y, 1, "train_y"),
@@ -128,16 +156,13 @@ class TrainSession:
             digest.update(str(array.shape).encode("ascii"))
             digest.update(array.tobytes())
         self.data_fingerprint = digest.hexdigest()
+        # Copy once onto the training device. Keeping these small-feature arrays
+        # resident avoids repeated host-to-GPU transfers on every update/check.
         # Copies prevent a caller's subsequent array edits from changing a run.
         self.train_x, self.train_y, self.validation_x, self.validation_y = (
-            torch.from_numpy(array.copy()) for array in arrays
+            torch.from_numpy(array.copy()).to(self.device) for array in arrays
         )
 
-        requested = self.config["device"]
-        if requested == "cuda" and not torch.cuda.is_available():
-            raise ValueError("CUDA was requested but is unavailable")
-        actual = "cuda" if requested == "auto" and torch.cuda.is_available() else requested
-        self.device = torch.device("cpu" if actual == "auto" else actual)
         torch.set_num_threads(self.config["torch_threads"])
         torch.use_deterministic_algorithms(self.config["deterministic"])
         torch.manual_seed(self.config["seed"])
@@ -152,6 +177,7 @@ class TrainSession:
         self.shuffle_generator = torch.Generator(device="cpu")
         self.shuffle_generator.manual_seed(self.config["seed"])
         self.permutation = torch.empty(0, dtype=torch.int64)
+        self._device_permutation = self.permutation.to(self.device)
         self.cursor = 0
         self.step = 0
         self.epoch = 0
@@ -186,22 +212,28 @@ class TrainSession:
             self.permutation = torch.randperm(
                 len(self.train_x), generator=self.shuffle_generator
             )
+            self._device_permutation = self.permutation.to(self.device)
             self.cursor = 0
             self.epoch += 1
         stop = min(self.cursor + self.config["batch_size"], len(self.train_x))
-        indices = self.permutation[self.cursor:stop]
+        indices = self._device_permutation[self.cursor:stop]
         self.cursor = stop
-        return self.train_x[indices].to(self.device), self.train_y[indices].to(self.device)
+        return self.train_x[indices], self.train_y[indices]
 
     def _mse(self, inputs: torch.Tensor, targets: torch.Tensor) -> float:
-        squared_error = 0.0
+        on_cuda = self.device.type == "cuda"
+        squared_error = torch.zeros((), dtype=torch.float64, device=self.device) if on_cuda else 0.0
+        # Larger evaluation chunks amortize CUDA launches without retaining
+        # activations for backward. The CPU evaluation order stays unchanged.
+        chunk_size = 65536 if on_cuda else 4096
         self.model.eval()
         with torch.no_grad():
-            for start in range(0, len(inputs), 4096):
-                prediction = self.model(inputs[start:start + 4096].to(self.device))
-                difference = prediction - targets[start:start + 4096].to(self.device)
-                squared_error += float(torch.sum(difference.double().square()).item())
-        return squared_error / len(inputs)
+            for start in range(0, len(inputs), chunk_size):
+                prediction = self.model(inputs[start:start + chunk_size])
+                difference = prediction - targets[start:start + chunk_size]
+                chunk_error = torch.sum(difference.double().square())
+                squared_error += chunk_error if on_cuda else float(chunk_error.item())
+        return float(squared_error.item() if on_cuda else squared_error) / len(inputs)
 
     def _validate(self, batch_mse: float) -> dict[str, Any]:
         validation_mse = self._mse(self.validation_x, self.validation_y)
@@ -249,8 +281,12 @@ class TrainSession:
             if not bool(torch.isfinite(loss).item()):
                 raise FloatingPointError("Nonfinite training loss")
             loss.backward()
-            if any(parameter.grad is not None and not bool(torch.isfinite(parameter.grad).all())
-                   for parameter in self.model.parameters()):
+            finite_gradients = [torch.isfinite(parameter.grad).all()
+                                for parameter in self.model.parameters()
+                                if parameter.grad is not None]
+            # One CUDA synchronization checks all parameters, rather than one
+            # host round trip per layer. Never advance Adam after bad gradients.
+            if not bool(torch.stack(finite_gradients).all().item()):
                 raise FloatingPointError("Nonfinite training gradients")
             self.optimizer.step()
             self.step += 1
@@ -321,6 +357,7 @@ class TrainSession:
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.shuffle_generator.set_state(checkpoint["shuffle_generator_state"].cpu())
         self.permutation = checkpoint["permutation"].cpu().clone()
+        self._device_permutation = self.permutation.to(self.device)
         self.cursor = int(checkpoint["cursor"])
         self.step = int(checkpoint["step"])
         self.epoch = int(checkpoint["epoch"])

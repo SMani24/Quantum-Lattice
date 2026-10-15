@@ -64,7 +64,7 @@ Other cell complexes can be supplied to `Lattice(n_vertices, edge_endpoints, fac
 ## One Python environment
 
 Use `.venv` for calibration, Monte Carlo generation, training, and tests.
-It contains the tested NumPy, Numba, Matplotlib, and CPU PyTorch versions.
+It contains the tested NumPy, Numba, Matplotlib, and CUDA PyTorch versions.
 From the repository root, set it up once with Python 3.10–3.13
 (3.10.12 matches the retained research runs):
 
@@ -78,12 +78,14 @@ Every runner then uses `python`, including
 `python experiments/baseline_mlp/run.py`. The setup script reuses `.venv`,
 installs missing pinned dependencies from `requirements.txt`, and leaves
 satisfied versions in place. `python3 scripts/setup_environment.py --check`
-checks the imports, Numba compilation, and a tiny Torch backward pass without
-installing anything. See [scripts/README.md](scripts/README.md) for offline setup.
+checks imports, Numba compilation, and an actual CUDA matrix multiplication and
+backward pass without installing anything. An accessible NVIDIA GPU and driver
+are required; the check fails clearly if CUDA is unavailable. See
+[scripts/README.md](scripts/README.md) for offline setup.
 
-The old `.venv-mlp` is retained locally as a reversible backup; current commands
-all use `.venv`. Existing checkpoints retain their recorded training settings
-and version checks.
+All current commands use `.venv`; the old `.venv-mlp` is unnecessary. Training
+uses CUDA 12.6 PyTorch 2.7.1 on the NVIDIA GPU, while calibration and Numba
+sampling continue to use the CPU in that same environment.
 
 ## Run the calibration
 

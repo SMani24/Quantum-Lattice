@@ -143,6 +143,8 @@ class TrainingConsole(RunConsole):
         eta_label = "ETA to ceiling" if stopper.get("enabled") and not finished else "ETA"
 
         labels = []
+        if status.get("device"):
+            labels.append(_clean(status["device"]))
         if self.training_context.get("size") is not None:
             labels.append(f"L={self.training_context['size']}")
         if self.training_context.get("mode"):

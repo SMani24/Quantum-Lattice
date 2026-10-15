@@ -58,13 +58,20 @@ identities, so its initial delay is data verification rather than training.
 If a pause arrives during a model's final chunk, that model finishes and the
 queue stops before the next model; select Continue from the menu to proceed.
 
-The setup script installs the pinned CPU PyTorch dependency into the same
-`.venv` while retaining the existing sampler packages. A preexisting
-`.venv-mlp` is left intact as a fallback; new commands do not require it.
-One CPU thread remains the reproducible default for this small network.
-Other dependency versions are recorded per run. Exact continuation rejects
-incompatible software/data/source changes; merely using a different virtual
-environment path does not change the recorded environment identity.
+The setup script installs PyTorch 2.7.1 with CUDA 12.6 into the same `.venv`,
+retaining the sampler packages. **New models default to `device: cuda`** and
+fail clearly if CUDA is unavailable; they never silently fall back to CPU.
+The progress panel and saved summaries show the actual compute device, and
+each manifest records GPU identity, CUDA runtime and deterministic cuBLAS settings.
+`--device cpu` remains an explicit alternative for new runs. The CPU thread
+setting controls host operations, not the GPU's parallelism.
+
+Training/validation tensors stay on the selected device, with a cached CUDA
+shuffle permutation to avoid transfers every update. CUDA validation uses larger
+chunks; this preserves the MSE objective but can change floating-point reduction
+roundoff relative to CPU. The batch size, Adam settings and stopping policy are
+unchanged. Exact continuation requires the original device, environment, source
+and data; changing an existing CPU queue to GPU requires a fresh queue.
 
 ## Protocol and row counts
 
@@ -177,11 +184,11 @@ next model; resume continues it and skips already finished models. Failed
 uninitialized child files are preserved and retries use a fresh child path.
 Each model has its own RESULTS.md. Final test evaluation stays a separate action.
 
-The published `1b70fd6` fixed-budget runs remain readable/evaluable. Their saved
-10,000-update budget and disabled early stopping are preserved; compatibility
-is restricted to that exact source version and unchanged architecture/data logic.
-Known paused runs can continue with recorded compatibility provenance. Use a
-new run/campaign to apply the new stopping policy; resume never changes it.
+Use a new queue when changing devices or software versions. Saved queues keep
+their original training settings and cannot be converted by editing their JSON.
+Within the same unchanged CUDA setup, checkpoints retain the optimizer, RNG,
+shuffle cursor and stopping state for exact continuation. Reproducibility across
+CPU/GPU or different GPU software/hardware is not claimed.
 
 ## Files and results
 

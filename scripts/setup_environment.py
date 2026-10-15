@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create or check the shared .venv without upgrading satisfied packages."""
+"""Create or check the shared CUDA .venv without upgrading satisfied packages."""
 
 from __future__ import annotations
 
@@ -18,8 +18,13 @@ PYTHON = ENVIRONMENT / ("Scripts/python.exe" if sys.platform == "win32" else "bi
 SMOKE_CHECK = r"""
 import importlib.metadata as metadata
 import json
+import os
 import platform
 import sys
+
+# Set before importing Torch or creating a CUDA context, matching the trainer.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import matplotlib
 import numba
 import numpy as np
@@ -32,18 +37,30 @@ def compiled_sum(values):
 
 assert compiled_sum(np.arange(4, dtype=np.int64)) == 6
 torch.set_num_threads(1)
-weights = torch.tensor([1.0, 2.0], requires_grad=True)
-loss = weights.square().sum()
-loss.backward()
-assert torch.equal(weights.grad, torch.tensor([2.0, 4.0]))
 expected = {"numpy": "2.2.6", "matplotlib": "3.10.8", "numba": "0.63.1",
-            "torch": "2.7.1+cpu"}
+            "torch": "2.7.1+cu126"}
 actual = {name: metadata.version(name) for name in expected}
 if actual != expected:
     raise SystemExit("Installed versions differ from requirements.txt: " + repr(actual))
+if not torch.cuda.is_available():
+    raise SystemExit("CUDA training is required, but PyTorch cannot access an NVIDIA GPU. "
+                     "Check nvidia-smi and run outside any sandbox that hides GPU devices. "
+                     "No CPU fallback was used.")
+torch.use_deterministic_algorithms(True)
+weights = torch.tensor([[1.0, 2.0], [3.0, 4.0]], device="cuda", requires_grad=True)
+inputs = torch.tensor([[1.0], [2.0]], device="cuda")
+loss = (weights @ inputs).square().sum()
+loss.backward()
+torch.cuda.synchronize()
+assert weights.is_cuda and weights.grad.is_cuda
+assert torch.equal(weights.grad.cpu(), torch.tensor([[10.0, 20.0], [22.0, 44.0]]))
 print(json.dumps({"python": platform.python_version(), "executable": sys.executable,
                   "versions": actual, "numba_compilation": "passed",
-                  "torch_cpu_backward": "passed"}, indent=2))
+                  "torch_cuda_matmul_backward": "passed",
+                  "cuda_runtime": torch.version.cuda,
+                  "gpu": torch.cuda.get_device_name(0),
+                  "gpu_memory_bytes": torch.cuda.get_device_properties(0).total_memory,
+                  "cublas_workspace_config": os.environ["CUBLAS_WORKSPACE_CONFIG"]}, indent=2))
 """
 
 
@@ -66,7 +83,7 @@ def main() -> int:
         print(f"Creating {ENVIRONMENT}", flush=True)
         venv.EnvBuilder(with_pip=True).create(ENVIRONMENT)
     if not args.check:
-        command = [str(PYTHON), "-m", "pip", "install", "--disable-pip-version-check"]
+        command = [str(PYTHON), "-m", "pip", "install", "--disable-pip-version-check", "--no-cache-dir"]
         requirements = ROOT / "requirements.txt"
         print("Installing missing pinned dependencies; satisfied versions are kept.", flush=True)
         if args.wheelhouse:
@@ -89,7 +106,7 @@ def main() -> int:
         run([str(PYTHON), "-m", "pip", "install", "--disable-pip-version-check",
              "--no-build-isolation", "--no-deps", "-e", str(ROOT)])
     run([str(PYTHON), "-c", SMOKE_CHECK])
-    print("Ready. Activate .venv once, then use python for every project runner.")
+    print("Ready. CUDA training and CPU sampling share this .venv.")
     print("  source .venv/bin/activate" if sys.platform != "win32" else r"  .venv\Scripts\activate")
     return 0
 

@@ -1,11 +1,11 @@
 # One environment for calibration, Monte Carlo generation, and neural networks.
-# CPU Torch preserves compatibility with the project's existing MLP checkpoints.
---extra-index-url https://download.pytorch.org/whl/cpu
+# CUDA 12.6 Torch trains the MLP on the NVIDIA GPU in this same environment.
+--extra-index-url https://download.pytorch.org/whl/cu126
 numpy==2.2.6
 matplotlib==3.10.8
 numba==0.63.1
 llvmlite==0.46.0
-torch==2.7.1+cpu
+torch==2.7.1+cu126
 # Keep the tested Torch dependency set reproducible without upgrading NumPy.
 filelock==3.32.3
 typing_extensions==4.16.0

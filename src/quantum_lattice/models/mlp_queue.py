@@ -302,7 +302,7 @@ def _save(queue, record, repo_root):
     paired._atomic_json(queue / "queue.json", record)
     summary = _summary(record, queue, repo_root)
     paired._atomic_json(queue / "comparison.json", summary)
-    fields = ["L", "mode", "state", "step", "max_steps", "stop_reason", "epoch", "training_row_passes", "training_examples_seen", "elapsed_seconds", "best_validation_mse", "best_step", "train_rows", "validation_rows",
+    fields = ["L", "mode", "device", "state", "step", "max_steps", "stop_reason", "epoch", "training_row_passes", "training_examples_seen", "elapsed_seconds", "best_validation_mse", "best_step", "train_rows", "validation_rows",
               "test_rows", "test_evaluated", "test_mse", "test_rmse", "test_mae", "run_dir"]
     temporary = queue / "comparison.csv.tmp"
     with temporary.open("w", newline="") as handle:
