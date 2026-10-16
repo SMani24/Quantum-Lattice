@@ -21,6 +21,11 @@ compares the original Monte Carlo estimator with its conditioned alternative
 using exact small-system answers and resumable independent-chain tests. This
 separate campaign preserves the original datasets and trained models.
 
+The [matched estimator MLP batch](experiments/estimator_mlp/README.md) trains
+fresh original/conditioned-feature controls at L=3,4 with paired seeds on CUDA.
+It reuses saved simulations and compares both models on original, conditioned
+and exact validation inputs, with a simple menu and checkpoint continuation.
+
 The [L24 sampling diagnostic](experiments/l24_sampling_diagnostic/README.md)
 compares continued local chains with checkpointed replica exchange for a
 selected slow observable. It uses the same environment and target sector,

@@ -28,3 +28,8 @@ non-test Hamiltonian: four continued local chains and four fresh 32-temperature
 replica-exchange ensembles. Its sweep budgets have different proposal costs.
 See [the diagnostic instructions](../experiments/l24_sampling_diagnostic/README.md)
 before running or changing its frozen settings.
+
+`estimator_mlp.json` fixes the matched L3/L4 estimator comparison: five paired
+seeds, original/conditioned training views, CUDA and validation-based stopping.
+It reuses cached non-test summaries; exact features are evaluation-only.
+See [the batch instructions](../experiments/estimator_mlp/README.md).

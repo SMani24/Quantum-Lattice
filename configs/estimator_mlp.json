@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "output_root": "codex material/artifacts/estimator_mlp/matched-small-20261016",
+  "validation_run": "codex material/artifacts/estimator_validation/full-20261016",
+  "sizes": [3, 4],
+  "mode": "all_edges",
+  "seeds": [2026101701, 2026101702, 2026101703, 2026101704, 2026101705],
+  "training": {
+    "learning_rate": 0.00001,
+    "batch_size": 128,
+    "max_steps": 100000,
+    "validation_interval": 100,
+    "device": "cuda",
+    "torch_threads": 1,
+    "deterministic": true,
+    "early_stopping": {
+      "enabled": true,
+      "patience": 20,
+      "min_delta": 0.000001,
+      "min_steps": 10000
+    }
+  },
+  "execution": {"checkpoint_steps": 100},
+  "provenance": {
+    "reference": "Reference Paper.pdf Appendix C.1 and supplied ANN/network.py",
+    "architecture": "3 -> 128 ReLU -> 150 ReLU -> 128 ReLU -> 1 linear",
+    "scope": "Paired estimator-only magnitude regression on L3/L4 development groups; no final-test payload access",
+    "choices": "Five paired fresh seeds, all-edge data, shared Adam/stopping policy, own-view validation selection and crossed f/g/exact validation evaluation. Exact inputs are evaluation only. These settings are our controlled experiment, not recovered historical training settings."
+  }
+}
