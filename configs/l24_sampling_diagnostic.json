@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "reference_campaign": "codex material/artifacts/estimator_validation/full-20261016",
+  "output_root": "codex material/artifacts/estimator_validation/l24-diagnosis-20261016/resampling",
+  "L": 24,
+  "hamiltonian_id": "hamiltonian_02371",
+  "flagged_star": 540,
+  "replicas": 4,
+  "seed": 2026101624,
+  "backend": "numba",
+  "lazy_probability": 0.05,
+  "total_sweeps": 200000,
+  "burn_in_sweeps": 20000,
+  "thinning_sweeps": 20,
+  "chunk_sweeps": 1000,
+  "block_records": 45,
+  "tempering": {"levels": 32, "swap_interval_sweeps": 10},
+  "execution": {"workers": 4}
+}

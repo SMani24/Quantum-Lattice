@@ -21,6 +21,11 @@ compares the original Monte Carlo estimator with its conditioned alternative
 using exact small-system answers and resumable independent-chain tests. This
 separate campaign preserves the original datasets and trained models.
 
+The [L24 sampling diagnostic](experiments/l24_sampling_diagnostic/README.md)
+compares continued local chains with checkpointed replica exchange for a
+selected slow observable. It uses the same environment and target sector,
+with adjustable CPU workers and Ctrl+C continuation.
+
 ## Repository layout
 
 | Path | Purpose |

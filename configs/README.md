@@ -22,3 +22,9 @@ driver is unavailable.
 `conditioned_estimator_validation.json` declares the full estimator-validation
 campaign: non-test census, exact/IID checks and fresh independent-chain panels.
 Original banks/models remain intact. See the [runner instructions](../experiments/estimator_validation/README.md).
+
+`l24_sampling_diagnostic.json` defines a separate investigation of one selected
+non-test Hamiltonian: four continued local chains and four fresh 32-temperature
+replica-exchange ensembles. Its sweep budgets have different proposal costs.
+See [the diagnostic instructions](../experiments/l24_sampling_diagnostic/README.md)
+before running or changing its frozen settings.
