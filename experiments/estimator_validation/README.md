@@ -4,18 +4,39 @@ Compare known-field `f=exp(-h)` and `g=sech(h)` without replacing the original
 datasets, model inputs or frozen models. From the repository root:
 
 ```sh
-.venv/bin/python experiments/estimator_validation/run.py run
+.venv/bin/python experiments/estimator_validation/run.py
 ```
 
-The same command starts or resumes the campaign. **Press Ctrl+C once and wait
-for the shell prompt to pause.** Active saved/IID tasks finish; fresh chains
+This opens a simple menu in your terminal:
+
+- **1** starts or continues the tests.
+- **2** changes CPU workers and remembers the choice for this campaign.
+- **3** shows saved progress and result paths.
+- **q** exits.
+
+The menu shows the chosen worker count, available logical CPUs and stage
+completion. **Press Ctrl+C once during execution and wait** to save and return
+to the menu. You can then change workers and continue. Active saved/IID tasks finish; fresh chains
 commit their current bounded 5,000-sweep chunk. Exact chain/RNG checkpoints are
 retained. Completed tasks are hash-checked and skipped on continuation.
 
 Four independent CPU workers run by default, with one BLAS/OMP thread each.
 Numba runs the Metropolis kernel; GPU MLP training is a separate workload in
-the same `.venv`. Use `run --workers 2` to reduce CPU load. Worker count may
-change on resume; settings, source and numerical-library versions are pinned.
+the same `.venv`. Choose any positive worker count in the menu; the new count
+applies on the next start/continue, rather than resizing an active pool.
+`runtime-settings.json` remembers it outside the immutable scientific plan.
+Settings, source and numerical-library versions remain pinned.
+
+Explicit command-line use is still available:
+
+```sh
+.venv/bin/python experiments/estimator_validation/run.py run --workers 12
+```
+
+`--workers` overrides the saved preference; otherwise the saved count wins over
+the original four-worker default. The selected count also appears in the log.
+`menu` explicitly opens the menu. With no command, redirected/noninteractive
+invocations retain the original one-shot run behavior and never wait for input.
 
 ## Declared campaign
 
@@ -61,6 +82,7 @@ exposed locally at `experiments/estimator_validation/results/full-20261016/`:
 
 - `plan.json`, `plan-sha256.json`: settings, identities, seeds, input/source hashes and runtime.
 - `status.json`, `execution.log`: progress and pause/error details.
+- `runtime-settings.json`: optional remembered CPU worker count, separate from experiment settings.
 - `jobs/<stage>/<task>/`: scalar summaries, compressed coordinate arrays, hash commit markers;
   fresh jobs also retain packed states and exact chain/RNG checkpoints.
 - `per-hamiltonian.csv`, `aggregate-summary.json`: explicit replica/window IDs;
