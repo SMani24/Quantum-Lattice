@@ -16,6 +16,11 @@ Its saved queue trains ready lattice sizes in both data modes, one model at a
 time, with pause/resume and comparison tables. Saved runs have terminal
 summaries. The full Phase 1 study remains ahead.
 
+The [estimator-validation runner](experiments/estimator_validation/README.md)
+compares the original Monte Carlo estimator with its conditioned alternative
+using exact small-system answers and resumable independent-chain tests. This
+separate campaign preserves the original datasets and trained models.
+
 ## Repository layout
 
 | Path | Purpose |

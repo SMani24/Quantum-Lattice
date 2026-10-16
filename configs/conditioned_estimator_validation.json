@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "seed": 20261016,
+  "lattice_sizes": [3, 4, 8, 12, 16, 20, 24],
+  "bank_root": "codex material/artifacts/phase1_sample_generation/campaigns/phase1_paper_domain",
+  "output_root": "codex material/artifacts/estimator_validation/full-20261016",
+  "pilot_selection": "codex material/artifacts/phase1_mlp/baseline-review-20261015/sampling/selection.json",
+  "derivation_pdf": "codex material/artifacts/reference_derivations/conditioned_flip_estimator/conditioned_flip_estimator_derivation.pdf",
+  "saved": {"limit_per_size": null, "exact_sizes": [3, 4]},
+  "iid": {"fields_per_size": 32, "replicates": 128, "records": 4500},
+  "multistart": {
+    "random_fields_per_size": 16,
+    "stress_fields_per_size": 4,
+    "replicas": 4,
+    "burn_in_sweeps": 10000,
+    "total_sweeps": 500000,
+    "thinning_sweeps": 20,
+    "chunk_sweeps": 5000,
+    "lazy_probability": 0.05,
+    "backend": "numba",
+    "equal_budget_windows": [[10000, 100000], [100000, 190000], [410000, 500000]],
+    "cumulative_ends": [100000, 200000, 500000]
+  },
+  "stationary": {"fields_per_size": 4, "replicas": 32, "total_sweeps": 100000},
+  "statistics": {"block_sizes": [45, 90, 150], "probe_count": 12},
+  "execution": {"workers": 4, "minimum_free_gib": 4},
+  "scope": "Known-field estimator validation only; no bank replacement, neural-network training or final-test payload access."
+}

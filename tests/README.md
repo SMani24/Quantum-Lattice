@@ -22,6 +22,12 @@ The unified `requirements.txt` includes Torch and Numba, so all checks can run
 in one environment. Torch-dependent checks still skip on deliberately minimal
 installations. Synthetic fixture errors are not research accuracy.
 
+Estimator-validation checks add independent flip-matrix/overlap oracles,
+variance identities, stable conditioning, split-Rhat degeneracies and checkpoint
+crash recovery. A tiny two-worker campaign checks all stages, test exclusion,
+resume/integrity, task locks, low-disk pauses and actual Ctrl+C handling. These
+checks do not execute the full research campaign.
+
 Run the unit and integration checks from the repository root:
 
 ```sh

@@ -18,3 +18,7 @@ sizes and at least 7,450 independent training Hamiltonians per size.
 The campaign distinguishes paper-supported settings from our split, sampling
 protocol and compact-storage choices. The historical phase-selection/training
 driver is unavailable.
+
+`conditioned_estimator_validation.json` declares the full estimator-validation
+campaign: non-test census, exact/IID checks and fresh independent-chain panels.
+Original banks/models remain intact. See the [runner instructions](../experiments/estimator_validation/README.md).
