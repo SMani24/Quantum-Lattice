@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "parent_run": "codex material/artifacts/estimator_mlp/matched-small-20261016",
+  "output_root": "codex material/artifacts/estimator_convergence/matched-long-20261017",
+  "training": {
+    "max_steps": 500000,
+    "early_stopping": {
+      "enabled": true,
+      "patience": 100,
+      "min_delta": 0.000001,
+      "min_steps": 150000
+    }
+  },
+  "execution": {"checkpoint_steps": 100}
+}
