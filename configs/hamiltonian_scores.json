@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "campaigns": [
+    {
+      "label": "parent",
+      "run_dir": "codex material/artifacts/estimator_mlp/matched-small-20261016"
+    },
+    {
+      "label": "continued",
+      "run_dir": "codex material/artifacts/estimator_convergence/matched-long-20261017"
+    }
+  ],
+  "split": "validation",
+  "sign_source": "reference_sign_oracle",
+  "prediction_policy": "raw_unclipped",
+  "primary_metric": "two_channel_full",
+  "include_zero_field_baseline": true,
+  "batch_size": 128
+}
