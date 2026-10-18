@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "scope": "CPU-only architecture and data-adapter foundation; not a research training campaign",
+  "feature_cache": "codex material/artifacts/estimator_mlp/matched-small-20261016/features",
+  "architecture": {
+    "hidden_channels": [32, 64, 32],
+    "kernel_size": 3
+  },
+  "checks": {
+    "sizes": [3, 4, 8],
+    "seed": 20261018,
+    "synthetic_hamiltonians": 2,
+    "optimizer_steps": 12,
+    "learning_rate": 0.001
+  }
+}
