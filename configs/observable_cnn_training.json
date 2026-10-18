@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "sizes": [4, 3],
+  "seeds": [2026101701, 2026101702, 2026101703, 2026101704, 2026101705],
+  "models": ["cnn", "map_mlp"],
+  "views": ["f", "g"],
+  "feature_cache": "codex material/artifacts/estimator_mlp/matched-small-20261016/features",
+  "output_root": "codex material/artifacts/observable_cnn/campaigns/matched-L34-20261018",
+  "architecture": {"hidden_channels": [32, 64, 32], "kernel_size": 3},
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 32,
+    "max_epochs": 500,
+    "validation_batch_size": 256,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 50,
+      "patience_epochs": 30,
+      "min_delta": 0.000001
+    }
+  },
+  "execution": {"checkpoint_updates": 25},
+  "provenance": {
+    "purpose": "Prospective matched observable-map architecture and estimator comparison; L4 first, then L3; five paired seeds per four-arm panel.",
+    "reference": "Reference Paper.pdf Appendix C.1 and supplied ANN/network.py define the local PaperMLP; the CNN and this controlled training policy are our adaptations.",
+    "controls": "Fresh map-MLP and CNN models receive the same Hamiltonian batches and epoch opportunities. Old edge-batched MLPs are historical context, not the matched architecture control.",
+    "evaluation": "Hamiltonian-grouped validation only. Own-view MSE selects strict best weights; crossed f/g/exact predictions and reference-sign-assisted D5 are post-selection diagnostics. No final-test or spin-record access.",
+    "scope": "Known-field simulation; raw unclipped magnitudes; exact inputs never train or select. Larger matched lattices and snapshot CNNs remain deferred. Long runs are user launched."
+  }
+}
