@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "sizes": [4],
+  "seeds": [2026102001, 2026102002],
+  "models": ["baseline", "batchnorm", "groupnorm", "residual"],
+  "views": ["g"],
+  "feature_cache": "codex material/artifacts/estimator_mlp/matched-small-20261016/features",
+  "output_root": "codex material/artifacts/cnn_ablation/campaigns/L4-g-screen-20261020",
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 32,
+    "max_epochs": 1000,
+    "validation_batch_size": 256,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 100,
+      "patience_epochs": 75,
+      "min_delta": 0.000001
+    }
+  },
+  "execution": {"checkpoint_updates": 100},
+  "provenance": {
+    "purpose": "Prospective fixed-policy architecture screen after professor/co-worker feedback; four arms, two fresh paired seeds, L4 conditioned-g development groups only.",
+    "baseline": "Fresh original 37922-parameter circular CNN receives the SAME longer budget as every new arm. Prior frozen 500-epoch results remain intact.",
+    "architectures": "Baseline; same convolutions plus BatchNorm; same convolutions plus 8-group GroupNorm; exact same convolutions plus parameter-free residual skip. Conv biases are retained across all arms.",
+    "selection": "Rank by mean own-view validation MSE over both seeds only after all 8 models finish. D5 and crossed f/g/exact inputs are secondary, not selection criteria.",
+    "limits": "Screening is not fresh confirmation, optimal tuning, full convergence or an estimator interaction test. GroupNorm uses global spatial statistics. Known-field simulation targets magnitudes only; D5 uses reference signs.",
+    "next": "Review all arms including failures/caps; freeze shortlist and final multi-seed/size/f-g/untouched-H protocol before confirmation. Raw-snapshot set-CNN remains separate planned work. Long runs are user launched."
+  }
+}
