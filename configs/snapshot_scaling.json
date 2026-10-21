@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "L": 4,
+  "feature_cache": "codex material/artifacts/estimator_mlp/matched-small-20261016/features",
+  "output_root": "codex material/artifacts/snapshot_learning/scaling/L4-M256-20261021",
+  "selection": {
+    "selection_seed": 2026102199,
+    "train_hamiltonian_counts": [512, 2048, 7452],
+    "validation_hamiltonians": 128,
+    "shots": 256
+  },
+  "seeds": [2026102101, 2026102102, 2026102103, 2026102104, 2026102105],
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 16,
+    "max_epochs": 200,
+    "validation_batch_size": 16,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 30,
+      "patience_epochs": 30,
+      "min_delta": 0.000001
+    },
+    "shot_chunk_size": 32,
+    "activation_checkpoint": true
+  },
+  "inverse_ising": {
+    "ridge": 0.001,
+    "max_iterations": 100,
+    "tolerance": 0.000001
+  },
+  "inverse_reference": {
+    "campaign_root": "codex material/artifacts/snapshot_learning/campaigns/L4-pilot-20261021",
+    "task_key": "L4-M256-inverse_ising"
+  },
+  "execution": {
+    "checkpoint_updates": 50
+  },
+  "provenance": {
+    "purpose": "L4 training-data scaling of the unchanged matched mean CNN and raw-set CNN, using a fixed 256-record budget.",
+    "selection": "Nested UID-hash prefixes of 512, 2048 and all 7452 existing training Hamiltonians. The same 128 development validation Hamiltonians and per-H record indices are used throughout; no final-test payloads.",
+    "comparison": "Thirty neural jobs: two methods, three training counts, five paired seeds. Seed-averaged metrics are not ensemble predictions. The verified completed inverse baseline is referenced once, without refitting or artificial seed/count replication.",
+    "training_policy": "Common 200-epoch ceiling and early stopping, not equal optimizer-update or compute budgets. Full epochs have 32, 128 and 466 updates. Interpret the curve as performance under this training policy, not a pure data-count intervention at equal compute.",
+    "information": "True fields are labels and scoring references only. Complete edge sums are sufficient under the fixed-support IID equilibrium likelihood; saved MCMC records are correlated and nominal counts are not effective independent samples.",
+    "architecture": "Keep the two 38690-parameter architectures unchanged in this scaling study. Structural changes require a separate controlled comparison.",
+    "long_runs": "User launches all research training. CUDA required; the shared .venv is used. Ctrl+C saves bounded progress. Immutable source/data/device bindings protect resume."
+  }
+}
