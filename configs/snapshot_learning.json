@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "L": 4,
+  "feature_cache": "codex material/artifacts/estimator_mlp/matched-small-20261016/features",
+  "output_root": "codex material/artifacts/snapshot_learning/campaigns/L4-pilot-20261021",
+  "selection": {
+    "selection_seed": 2026102199,
+    "train_hamiltonians": 512,
+    "validation_hamiltonians": 128,
+    "shot_counts": [64, 256]
+  },
+  "seeds": [2026102101, 2026102102],
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 16,
+    "max_epochs": 200,
+    "validation_batch_size": 16,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 30,
+      "patience_epochs": 30,
+      "min_delta": 0.000001
+    },
+    "shot_chunk_size": 32,
+    "activation_checkpoint": true
+  },
+  "inverse_ising": {
+    "ridge": 0.001,
+    "max_iterations": 100,
+    "tolerance": 0.000001
+  },
+  "execution": {
+    "checkpoint_updates": 10,
+    "inverse_workers": 8
+  },
+  "provenance": {
+    "purpose": "L4 development pilot: shared raw-shot set CNN, complete-edge-mean CNN and symmetric joint pseudolikelihood on identical nested record subsets.",
+    "selection": "Select model checkpoints by own-budget validation magnitude MSE only. No final-test data. Two initialization seeds are development stability checks.",
+    "information": "True fields are targets/scoring references, never neural inputs or inverse-solver arguments. Raw and complete means use the same records. Mean sufficiency is an IID fixed-support statement, not a correlated-trajectory guarantee.",
+    "scope": "512/128 Hamiltonian pilot, 64/256 retained records; not directly comparable to the prior full-size 4500-record observable campaign. Inverse fit uses CPU workers; neural training requires CUDA.",
+    "long_runs": "User launches research work. Ctrl+C checkpoints neural updates and finishes bounded in-flight inverse fits before returning to the menu. Source/data/device bindings prevent accidental run changes."
+  }
+}
