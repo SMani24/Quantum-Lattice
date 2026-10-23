@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "L": 4,
+  "source_campaign": "codex material/artifacts/snapshot_learning/scaling/L4-M256-20261021",
+  "output_root": "codex material/artifacts/snapshot_structure/campaigns/L4-H2048-M256-20261023",
+  "selection": {
+    "selection_seed": 2026102199,
+    "validation_hamiltonians": 128,
+    "shots": 256,
+    "train_hamiltonians": 2048
+  },
+  "seeds": [
+    2026102301,
+    2026102302,
+    2026102303,
+    2026102304,
+    2026102305
+  ],
+  "factors": {
+    "residual": [
+      false,
+      true
+    ],
+    "gauge_augmentation": [
+      false,
+      true
+    ]
+  },
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 16,
+    "max_epochs": 200,
+    "validation_batch_size": 16,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 30,
+      "patience_epochs": 30,
+      "min_delta": 1e-06
+    },
+    "shot_chunk_size": 32,
+    "activation_checkpoint": true
+  },
+  "inverse_ising": {
+    "ridge": 0.001,
+    "max_iterations": 100,
+    "tolerance": 1e-06
+  },
+  "inverse_reference": {
+    "campaign_root": "codex material/artifacts/snapshot_learning/campaigns/L4-pilot-20261021",
+    "task_key": "L4-M256-inverse_ising"
+  },
+  "execution": {
+    "checkpoint_updates": 50
+  },
+  "diagnostics": {
+    "gauge_masks": 16,
+    "gauge_seed": 2026102391
+  },
+  "provenance": {
+    "purpose": "Separate fixed-budget development study: mean/set representations crossed with an identity residual connection and bag-wide vertex-gauge augmentation.",
+    "design": "Forty fresh fits at L4, 2048 training H and 128 reused development validation H, 256 records/H, five fresh paired seeds. Existing scaling and pilot outputs are immutable context, not replacement seed controls.",
+    "data": "Read-only prefix of the frozen scaling cache; identical H UIDs, record indices, duplicate-state multiplicities and targets across arms. No resampling or final-test access.",
+    "augmentation": "One root-fixed vertex-induced edge mask per whole H bag; independently keyed by paired model seed, epoch and UID. True fields are not inputs. Magnitudes unchanged. Exact equilibrium symmetry does not remove finite-initialization bias.",
+    "training_policy": "Adam1e-4, batch16 H, 200-epoch maximum, 30 grace/30 patience at1e-6, strict best original-view validation includingepoch0. Common policy, not equal realized compute.",
+    "diagnostics": "Sixteen fixed held-H gauge views after selected-model evaluation; diagnostic only, not checkpoint selection or independent validation H. No test-time group averaging for primary scores.",
+    "metrics": "Magnitude MSE primary; reference-sign-assisted D5 secondary. Native signed inverse results are reported separately. Per-H unit of uncertainty; neural seeds are not independent training banks.",
+    "scope": "Implementation prepared ahead of scaling review as authorized23October2026. Retain N2048 as the prospectively proposed budget; review scaling and actual worker timing before long training. Honeycomb, other graph types and new network families are deferred.",
+    "long_runs": "User launches research training. CUDA required with no CPU fallback. Shared .venv; bounded atomic pause/resume. No research training during implementation."
+  }
+}
