@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "sizes": [
+    3,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24
+  ],
+  "size_order": [
+    4,
+    24,
+    8,
+    16,
+    3,
+    12,
+    20
+  ],
+  "seeds": [
+    2026102801,
+    2026102802,
+    2026102803,
+    2026102804,
+    2026102805
+  ],
+  "feature_cache": "codex material/artifacts/final_benchmark/features-20261027",
+  "output_root": "codex material/artifacts/final_benchmark/campaign-20261028",
+  "prior_manifest_root": "codex material/artifacts/final_benchmark/inputs/prior",
+  "architecture": {
+    "hidden_channels": [
+      32,
+      64,
+      32
+    ],
+    "kernel_size": 3
+  },
+  "training": {
+    "device": "cuda",
+    "deterministic": true,
+    "torch_threads": 1,
+    "learning_rate": 0.0001,
+    "batch_size_hamiltonians": 32,
+    "max_epochs": 500,
+    "validation_batch_size": 256,
+    "early_stopping": {
+      "enabled": true,
+      "min_epochs": 50,
+      "patience_epochs": 30,
+      "min_delta": 1e-06
+    }
+  },
+  "confirmation": {
+    "count_per_size": 512,
+    "seed": 2026102880,
+    "sampling": {
+      "total_sweeps": 100000,
+      "burn_in_sweeps": 10000,
+      "thinning_sweeps": 20,
+      "lazy_probability": 0.05,
+      "backend": "numba",
+      "chunk_sweeps": 2000,
+      "exact_small_sizes": true,
+      "block_size_records": 150
+    },
+    "diagnostics": {
+      "enabled": true,
+      "hamiltonians_per_size": 8,
+      "replicas": 4
+    }
+  },
+  "statistics": {
+    "bootstrap_samples": 10000,
+    "seed": 2026102891,
+    "primary": "L4 CNN g minus f own-input magnitude MSE",
+    "other_size_contrasts": "prespecified secondary; no selection"
+  },
+  "execution": {
+    "workers": 5,
+    "checkpoint_updates": 250,
+    "max_active_hours": 96,
+    "science_active_hours": 90,
+    "preflight_active_seconds": 600
+  },
+  "hardware": {
+    "gpu_uuid": "GPU-SET-IN-IGNORED-WORKER-CONFIG",
+    "expected_online": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6,
+      7,
+      9,
+      10,
+      11
+    ],
+    "expected_boost": 0,
+    "max_cpu_c": 80,
+    "max_gpu_c": 82,
+    "poll_seconds": 10,
+    "drain_seconds": 300,
+    "require_zero_swap": true
+  },
+  "raw_panel": {
+    "enabled": true,
+    "source_root": "codex material/artifacts/final_benchmark/inputs/raw_models",
+    "size": 4,
+    "records": [
+      256,
+      64
+    ],
+    "record_seed": 2026102882,
+    "seeds": [
+      2026102101,
+      2026102102,
+      2026102103,
+      2026102104,
+      2026102105
+    ],
+    "methods": [
+      "mean_cnn",
+      "set_cnn"
+    ],
+    "ridge": 0.001,
+    "max_iterations": 100,
+    "tolerance": 1e-06
+  },
+  "provenance": {
+    "purpose": "Fixed architecture, all-reference-size final simulation study with independent fresh-H confirmation; no hyperparameter search.",
+    "training_scope": "Fresh 140-fit primary cohort, five paired seeds; old development fits remain historical and are not pooled as extra repeats.",
+    "independent_unit": "Hamiltonian; 7452 train and1242 reused development per size; original exposed tests are excluded.",
+    "information_access": "f/g features use generating fields for known-field simulation preprocessing. Raw L4 inputs and inverse solver do not receive true fields.",
+    "sampling_limits": "Retained MCMC records are correlated; targeted four-chain diagnostics flag and retain failures, not certify all equilibria. L24 mixing concern remains explicit.",
+    "budget": "At most96 cumulative active PC hours, stop scientific dispatch90h leaving6h reserve; do not automatically expand the design.",
+    "architecture": "Plain periodic CNN and fresh paper-shaped map MLP; no newBN/residual/gauge/attention trials."
+  }
+}
