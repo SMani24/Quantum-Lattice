@@ -5,8 +5,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
-from quantum_lattice.models.final_plots import render_final_plots
+from quantum_lattice.models.final_plots import _bounds, render_final_plots
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator
 
 
 def write_fixture(run):
@@ -90,6 +93,29 @@ class FinalPlotTests(unittest.TestCase):
         path.write_text(json.dumps(data))
         with self.assertRaisesRegex(ValueError,"scope/count metadata"):
             render_final_plots(self.run)
+
+    def test_canvas_guard_ignores_undrawn_ticks_but_rejects_drawn_overflow(self):
+        fig,ax=plt.subplots(figsize=(4,2),layout="constrained")
+        self.addCleanup(plt.close,fig)
+        ax.set_ylim(0,.0042)
+        # Matplotlib creates this last label with visible=True but never draws
+        # it because its tick lies outside the view. It extends above the page.
+        ax.yaxis.set_major_locator(FixedLocator([0,.001,.002,.003,.004,.005]))
+        _bounds(fig)
+        last=ax.yaxis.get_major_ticks()[-1]
+        self.assertTrue(last.label1.get_visible())
+        self.assertGreater(last.label1.get_window_extent(fig.canvas.get_renderer()).y1,
+                           fig.canvas.get_width_height()[1])
+        svg=self.run/"undrawn-tick.svg"
+        with plt.rc_context({"svg.fonttype":"none"}):
+            fig.savefig(svg)
+        drawn_text=["".join(element.itertext()) for element in
+                    ET.parse(svg).getroot().iter("{http://www.w3.org/2000/svg}text")]
+        self.assertIn("0.004",drawn_text)
+        self.assertNotIn("0.005",drawn_text)
+        fig.text(1.02,.5,"genuine overflow",ha="left")
+        with self.assertRaisesRegex(ValueError,"genuine overflow"):
+            _bounds(fig)
 
 
 if __name__=="__main__":unittest.main()

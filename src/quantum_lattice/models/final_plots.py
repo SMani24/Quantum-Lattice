@@ -107,9 +107,23 @@ def _bounds(fig):
     fig.canvas.draw()
     renderer = fig.canvas.get_renderer()
     width,height = fig.canvas.get_width_height()
+    # Locators can retain visible Text objects for ticks outside the view.
+    # Axis.draw uses _update_ticks() to omit those ticks; inspect the same set
+    # so an undrawn label cannot falsely fail the canvas check.
+    undrawn_tick_labels = set()
+    for ax in fig.axes:
+        if not ax.get_visible() or not ax.axison:
+            continue
+        for axis in (ax.xaxis, ax.yaxis):
+            if not axis.get_visible():
+                continue
+            drawn_ticks = set(axis._update_ticks())
+            for tick in (*axis.get_major_ticks(), *axis.get_minor_ticks()):
+                if tick not in drawn_ticks:
+                    undrawn_tick_labels.update((tick.label1, tick.label2))
     missing = []
     for text in fig.findobj(match=Text):
-        if text.get_visible() and text.get_text().strip():
+        if text not in undrawn_tick_labels and text.get_visible() and text.get_text().strip():
             box = text.get_window_extent(renderer)
             if box.x0 < -1 or box.y0 < -1 or box.x1 > width+1 or box.y1 > height+1:
                 missing.append(text.get_text())
